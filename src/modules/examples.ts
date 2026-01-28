@@ -210,6 +210,32 @@ export class UIExampleFactory {
   }
 
   @example
+  static registerRightClickMenuHtmlTranslateItem() {
+    const menuIcon = `chrome://${addon.data.config.addonRef}/content/icons/favicon@0.5x.png`;
+    ztoolkit.Menu.register("item", {
+      tag: "menuitem",
+      id: "zotero-itemmenu-arxiv-html-translate",
+      label: "html 翻译",
+      icon: menuIcon,
+      isHidden: () => {
+        const items = ztoolkit.getGlobal("ZoteroPane").getSelectedItems();
+        if (!items || items.length === 0) return true;
+        return !items.every((item: Zotero.Item) => {
+          if (!item.isAttachment()) return false;
+          const contentType = (item.attachmentContentType || "").toLowerCase();
+          const filename = (item.attachmentFilename || "").toLowerCase();
+          return (
+            contentType.startsWith("text/html") ||
+            filename.endsWith(".html") ||
+            filename.endsWith(".htm")
+          );
+        });
+      },
+      commandListener: () => addon.hooks.onDialogEvents("htmlTranslate"),
+    });
+  }
+
+  @example
   static registerWindowMenuWithSeparator() {
     ztoolkit.Menu.register("menuFile", {
       tag: "menuseparator",

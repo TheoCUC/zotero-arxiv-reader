@@ -34,6 +34,88 @@
     style="width: 100%;"
   ></html:textarea>
   <html:label data-l10n-id="pref-html-blocklist-help"></html:label>
+  <separator />
+  <label><html:h3 data-l10n-id="pref-translate-title"></html:h3></label>
+  <hbox>
+    <html:label
+      for="zotero-prefpane-__addonRef__-translate-api-base"
+      data-l10n-id="pref-translate-api-base"
+    ></html:label>
+    <html:input
+      type="text"
+      id="zotero-prefpane-__addonRef__-translate-api-base"
+      preference="translationApiBaseUrl"
+      style="width: 100%;"
+    ></html:input>
+  </hbox>
+  <hbox>
+    <html:label
+      for="zotero-prefpane-__addonRef__-translate-model"
+      data-l10n-id="pref-translate-model"
+    ></html:label>
+    <html:input
+      type="text"
+      id="zotero-prefpane-__addonRef__-translate-model"
+      preference="translationModel"
+      style="width: 100%;"
+    ></html:input>
+  </hbox>
+  <hbox>
+    <html:label
+      for="zotero-prefpane-__addonRef__-translate-rpm"
+      data-l10n-id="pref-translate-rpm"
+    ></html:label>
+    <html:input
+      type="number"
+      min="1"
+      id="zotero-prefpane-__addonRef__-translate-rpm"
+      preference="translationRPM"
+      style="width: 100%;"
+    ></html:input>
+  </hbox>
+  <hbox>
+    <html:label
+      for="zotero-prefpane-__addonRef__-translate-api-key"
+      data-l10n-id="pref-translate-api-key"
+    ></html:label>
+    <html:input
+      type="password"
+      id="zotero-prefpane-__addonRef__-translate-api-key"
+      preference="translationApiKey"
+      style="width: 100%;"
+    ></html:input>
+  </hbox>
+  <html:label data-l10n-id="pref-translate-help"></html:label>
+  <html:label data-l10n-id="pref-translate-prompts"></html:label>
+  <html:div id="zotero-prefpane-__addonRef__-translate-prompts"></html:div>
+  <hbox>
+    <html:label
+      for="zotero-prefpane-__addonRef__-translate-prompt-name"
+      data-l10n-id="pref-translate-prompt-name"
+    ></html:label>
+    <html:input
+      type="text"
+      id="zotero-prefpane-__addonRef__-translate-prompt-name"
+      style="width: 100%;"
+    ></html:input>
+  </hbox>
+  <hbox>
+    <html:label
+      for="zotero-prefpane-__addonRef__-translate-prompt-content"
+      data-l10n-id="pref-translate-prompt-content"
+    ></html:label>
+  </hbox>
+  <html:textarea
+    id="zotero-prefpane-__addonRef__-translate-prompt-content"
+    rows="4"
+    style="width: 100%;"
+  ></html:textarea>
+  <hbox>
+    <html:button
+      id="zotero-prefpane-__addonRef__-translate-prompt-add"
+      data-l10n-id="pref-translate-prompt-add"
+    ></html:button>
+  </hbox>
   <hbox class="virtualized-table-container" flex="1" height="300px">
     <html:div id="__addonRef__-table-container" />
   </hbox>
