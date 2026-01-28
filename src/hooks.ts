@@ -8,6 +8,14 @@ import {
 import { attachArxivHtmlForSelection } from "./modules/arxivDebug";
 import { cleanHtmlAttachmentsForSelection } from "./modules/htmlCleaner";
 import { translateHtmlForSelection } from "./modules/htmlTranslator";
+import {
+  registerTranslationEditPopup,
+  registerTranslationEditContextMenu,
+  registerTranslationEditDblClick,
+  unregisterTranslationEditPopup,
+  unregisterTranslationEditContextMenu,
+  unregisterTranslationEditDblClick,
+} from "./modules/translationEditor";
 import { openTranslationProgressDialog } from "./modules/translationProgress";
 import { getString, initLocale } from "./utils/locale";
 import { registerPrefsScripts } from "./modules/preferenceScript";
@@ -88,6 +96,10 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
 
   UIExampleFactory.registerWindowMenuWithSeparator();
 
+  registerTranslationEditPopup();
+  registerTranslationEditContextMenu();
+  registerTranslationEditDblClick();
+
   PromptExampleFactory.registerNormalCommandExample();
 
   PromptExampleFactory.registerAnonymousCommandExample(win);
@@ -112,6 +124,9 @@ async function onMainWindowUnload(win: Window): Promise<void> {
 
 function onShutdown(): void {
   ztoolkit.unregisterAll();
+  unregisterTranslationEditPopup();
+  unregisterTranslationEditContextMenu();
+  unregisterTranslationEditDblClick();
   addon.data.dialog?.window?.close();
   // Remove addon object
   addon.data.alive = false;
