@@ -5,6 +5,7 @@ import {
   PromptExampleFactory,
   UIExampleFactory,
 } from "./modules/examples";
+import { showArxivUrlDebug } from "./modules/arxivDebug";
 import { getString, initLocale } from "./utils/locale";
 import { registerPrefsScripts } from "./modules/preferenceScript";
 import { createZToolkit } from "./utils/ztoolkit";
@@ -73,6 +74,8 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
   UIExampleFactory.registerRightClickMenuItem();
 
   UIExampleFactory.registerRightClickMenuPopup(win);
+
+  UIExampleFactory.registerRightClickMenuDebugItem();
 
   UIExampleFactory.registerWindowMenuWithSeparator();
 
@@ -175,6 +178,9 @@ function onDialogEvents(type: string) {
       break;
     case "vtableExample":
       HelperExampleFactory.vtableExample();
+      break;
+    case "arxivDebug":
+      void showArxivUrlDebug();
       break;
     default:
       break;

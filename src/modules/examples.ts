@@ -172,6 +172,18 @@ export class UIExampleFactory {
   }
 
   @example
+  static registerRightClickMenuDebugItem() {
+    const menuIcon = `chrome://${addon.data.config.addonRef}/content/icons/favicon@0.5x.png`;
+    ztoolkit.Menu.register("item", {
+      tag: "menuitem",
+      id: "zotero-itemmenu-arxiv-debug",
+      label: "debug",
+      commandListener: () => addon.hooks.onDialogEvents("arxivDebug"),
+      icon: menuIcon,
+    });
+  }
+
+  @example
   static registerWindowMenuWithSeparator() {
     ztoolkit.Menu.register("menuFile", {
       tag: "menuseparator",
