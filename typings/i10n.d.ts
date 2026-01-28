@@ -15,6 +15,8 @@ export type FluentMessageId =
   | 'menupopup-label'
   | 'pref-enable'
   | 'pref-help'
+  | 'pref-html-blocklist'
+  | 'pref-html-blocklist-help'
   | 'pref-input'
   | 'pref-title'
   | 'prefs-table-detail'

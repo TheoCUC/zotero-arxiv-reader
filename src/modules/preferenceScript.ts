@@ -1,5 +1,6 @@
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
+import { getPref, setPref } from "../utils/prefs";
 
 export async function registerPrefsScripts(_window: Window) {
   // This function is called when the prefs window is opened
@@ -128,4 +129,18 @@ function bindPrefEvents() {
         `Successfully changed to ${(e.target as HTMLInputElement).value}!`,
       );
     });
+
+  const htmlBlocklist = addon.data
+    .prefs!.window.document?.querySelector(
+      `#zotero-prefpane-${config.addonRef}-html-blocklist`,
+    ) as HTMLTextAreaElement | null;
+  if (htmlBlocklist) {
+    const prefValue = getPref("htmlBlocklist");
+    if (typeof prefValue === "string") {
+      htmlBlocklist.value = prefValue;
+    }
+    htmlBlocklist.addEventListener("change", (e: Event) => {
+      setPref("htmlBlocklist", (e.target as HTMLTextAreaElement).value);
+    });
+  }
 }

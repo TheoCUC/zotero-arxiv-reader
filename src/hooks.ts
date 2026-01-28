@@ -6,6 +6,7 @@ import {
   UIExampleFactory,
 } from "./modules/examples";
 import { attachArxivHtmlForSelection } from "./modules/arxivDebug";
+import { cleanHtmlAttachmentsForSelection } from "./modules/htmlCleaner";
 import { getString, initLocale } from "./utils/locale";
 import { registerPrefsScripts } from "./modules/preferenceScript";
 import { createZToolkit } from "./utils/ztoolkit";
@@ -76,6 +77,8 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
   UIExampleFactory.registerRightClickMenuPopup(win);
 
   UIExampleFactory.registerRightClickMenuDebugItem();
+
+  UIExampleFactory.registerRightClickMenuHtmlItem();
 
   UIExampleFactory.registerWindowMenuWithSeparator();
 
@@ -181,6 +184,9 @@ function onDialogEvents(type: string) {
       break;
     case "arxivDebug":
       void attachArxivHtmlForSelection();
+      break;
+    case "htmlClean":
+      void cleanHtmlAttachmentsForSelection();
       break;
     default:
       break;
