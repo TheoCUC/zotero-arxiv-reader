@@ -55,6 +55,10 @@ async function updateTranslationText(
     return;
   }
   const doc = reader._iframeWindow?.document || element.ownerDocument;
+  if (!doc) {
+    ztoolkit.getGlobal("alert")("未找到文档，无法保存修改。");
+    return;
+  }
   element.textContent = newText;
   element.setAttribute(TRANSLATION_ATTR, "true");
   const html = (await Zotero.File.getContentsAsync(filePath)) as string;
@@ -121,7 +125,7 @@ function attachDblClickEditor(
         await Zotero.File.putContentsAsync(filePath, updated, "utf-8");
       };
 
-      textarea.addEventListener("keydown", (e) => {
+      textarea.addEventListener("keydown", (e: KeyboardEvent) => {
         if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
           e.preventDefault();
           void commit();

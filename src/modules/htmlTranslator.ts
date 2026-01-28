@@ -70,7 +70,9 @@ function alreadyTranslated(paragraph: Element): boolean {
 }
 
 function insertTranslation(paragraph: Element, text: string) {
-  const block = paragraph.ownerDocument.createElement("div");
+  const doc = paragraph.ownerDocument;
+  if (!doc) return;
+  const block = doc.createElement("div");
   block.className = TRANSLATION_CLASS;
   block.setAttribute(TRANSLATION_ATTR, "true");
   block.textContent = text;

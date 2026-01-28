@@ -1,4 +1,5 @@
 import { getPref } from "../utils/prefs";
+import { config } from "../../package.json";
 
 type TranslatePrompt = {
   id: string;
@@ -115,16 +116,26 @@ function getTranslationConfig() {
 
 function getSelectedPrompts(promptIds?: string[]): TranslatePrompt[] {
   const prompts = parsePrompts((getPref("translationPrompts") as string) || "");
-  const selections =
-    promptIds && promptIds.length > 0
-      ? promptIds
-      : parseSelections((getPref("translationPromptSelections") as string) || "");
-  if (selections.length === 0) {
+  if (promptIds && promptIds.length > 0) {
+    const selectionSet = new Set(promptIds);
+    const selected = prompts.filter((prompt) => selectionSet.has(prompt.id));
+    return selected.length > 0 ? selected : DEFAULT_PROMPTS.slice(0, 1);
+  }
+
+  const selectedId =
+    (getPref("translationPromptSelection") as string) ||
+    parseSelections(
+      (Zotero.Prefs.get(
+        `${config.prefsPrefix}.translationPromptSelections`,
+        true,
+      ) as string) || "",
+    )[0] ||
+    "";
+  if (!selectedId) {
     return prompts.length > 0 ? [prompts[0]] : DEFAULT_PROMPTS.slice(0, 1);
   }
-  const selectionSet = new Set(selections);
-  const selected = prompts.filter((prompt) => selectionSet.has(prompt.id));
-  return selected.length > 0 ? selected : DEFAULT_PROMPTS.slice(0, 1);
+  const selected = prompts.find((prompt) => prompt.id === selectedId);
+  return selected ? [selected] : DEFAULT_PROMPTS.slice(0, 1);
 }
 
 function extractResponseContent(data: any): string {

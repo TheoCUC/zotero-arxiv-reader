@@ -45,6 +45,86 @@ function sanitizeFileBaseName(id: string): string {
   return id.replace(/\//g, "_");
 }
 
+function serializeDocument(doc: Document, originalHtml: string): string {
+  const doctypeMatch = originalHtml.match(/<!doctype[^>]*>/i);
+  const doctype = doctypeMatch ? `${doctypeMatch[0]}\n` : "";
+  const html = doc.documentElement?.outerHTML || originalHtml;
+  return `${doctype}${html}`;
+}
+
+function resolveCssUrls(cssText: string, cssUrl: string): string {
+  const urlRe = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
+  const importRe =
+    /@import\s+(?:url\()?['"]?([^'")]+)['"]?\)?\s*;/gi;
+  const rewrite = (raw: string) => {
+    if (
+      raw.startsWith("data:") ||
+      raw.startsWith("http://") ||
+      raw.startsWith("https://") ||
+      raw.startsWith("//") ||
+      raw.startsWith("#")
+    ) {
+      return raw;
+    }
+    try {
+      return new URL(raw, cssUrl).toString();
+    } catch {
+      return raw;
+    }
+  };
+  let result = cssText.replace(urlRe, (_m, _q, url) => {
+    const resolved = rewrite(String(url));
+    return `url("${resolved}")`;
+  });
+  result = result.replace(importRe, (_m, url) => {
+    const resolved = rewrite(String(url));
+    return `@import url("${resolved}");`;
+  });
+  return result;
+}
+
+async function inlineStylesheets(htmlUrl: string, attachment: Zotero.Item) {
+  const filePath = await attachment.getFilePathAsync();
+  if (!filePath) return;
+  const html = (await Zotero.File.getContentsAsync(filePath)) as string;
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  const links = Array.from(
+    doc.querySelectorAll('link[rel~="stylesheet"][href]'),
+  ) as HTMLLinkElement[];
+  if (links.length === 0) return;
+
+  let changed = false;
+  for (const link of links) {
+    const href = link.getAttribute("href");
+    if (!href) continue;
+    let cssUrl: string;
+    try {
+      cssUrl = new URL(href, htmlUrl).toString();
+    } catch {
+      continue;
+    }
+    const xhr = await Zotero.HTTP.request("GET", cssUrl, {
+      successCodes: false,
+    });
+    if (xhr.status < 200 || xhr.status >= 300) {
+      continue;
+    }
+    const cssText = resolveCssUrls(xhr.responseText || "", cssUrl);
+    const style = doc.createElement("style");
+    style.setAttribute("data-zotero-inline-css", "true");
+    style.textContent = cssText;
+    link.parentNode?.insertBefore(style, link);
+    link.remove();
+    changed = true;
+  }
+
+  if (changed) {
+    const updated = serializeDocument(doc, html);
+    await Zotero.File.putContentsAsync(filePath, updated, "utf-8");
+  }
+}
+
 function findArxivUrlInItem(item: Zotero.Item): string | null {
   const urlField = (item.getField("url") as string) || "";
   const normalizedUrl = normalizeArxivUrl(urlField);
@@ -211,21 +291,24 @@ async function attachArxivHtml(item: Zotero.Item): Promise<AttachResult> {
   }
   const attachmentTitle = arxivId ? `arXiv HTML (${arxivId})` : "arXiv HTML";
 
-  return Zotero.Attachments.importFromURL({
-    libraryID: parentItem.libraryID,
-    url: htmlUrl,
-    parentItemID: parentItem.id,
-    title: attachmentTitle,
-    fileBaseName,
-    contentType: "text/html",
-  }).then(
-    () => ({ status: "attached", title, url: htmlUrl }),
-    (error) => ({
+  try {
+    const attachment = await Zotero.Attachments.importFromURL({
+      libraryID: parentItem.libraryID,
+      url: htmlUrl,
+      parentItemID: parentItem.id,
+      title: attachmentTitle,
+      fileBaseName,
+      contentType: "text/html",
+    });
+    await inlineStylesheets(htmlUrl, attachment);
+    return { status: "attached", title, url: htmlUrl };
+  } catch (error: any) {
+    return {
       status: "failed",
       title,
       reason: error?.message ? String(error.message) : String(error),
-    }),
-  );
+    };
+  }
 }
 
 export async function attachArxivHtmlForSelection(): Promise<void> {

@@ -3,21 +3,9 @@
 /* eslint-disable */
 // @ts-nocheck
 export type FluentMessageId =
-  | 'item-info-row-example-label'
-  | 'item-section-example1-head-text'
-  | 'item-section-example1-sidenav-tooltip'
-  | 'item-section-example2-button-tooltip'
-  | 'item-section-example2-head-text'
-  | 'item-section-example2-sidenav-tooltip'
-  | 'menuitem-filemenulabel'
-  | 'menuitem-label'
-  | 'menuitem-submenulabel'
-  | 'menupopup-label'
-  | 'pref-enable'
   | 'pref-help'
   | 'pref-html-blocklist'
   | 'pref-html-blocklist-help'
-  | 'pref-input'
   | 'pref-title'
   | 'pref-translate-api-base'
   | 'pref-translate-api-key'
@@ -26,13 +14,8 @@ export type FluentMessageId =
   | 'pref-translate-prompt-add'
   | 'pref-translate-prompt-content'
   | 'pref-translate-prompt-name'
-  | 'pref-translate-prompts'
+  | 'pref-translate-prompt-preview'
+  | 'pref-translate-prompt-select'
   | 'pref-translate-rpm'
   | 'pref-translate-title'
-  | 'prefs-table-detail'
-  | 'prefs-table-title'
-  | 'prefs-title'
-  | 'startup-begin'
-  | 'startup-finish'
-  | 'tabpanel-lib-tab-label'
-  | 'tabpanel-reader-tab-label';
+  | 'prefs-title';

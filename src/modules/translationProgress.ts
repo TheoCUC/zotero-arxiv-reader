@@ -1,4 +1,4 @@
-import { DialogHelper } from "zotero-plugin-toolkit";
+import type { DialogHelper } from "zotero-plugin-toolkit";
 
 type ProgressState = {
   total: number;

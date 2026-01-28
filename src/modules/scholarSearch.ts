@@ -1,13 +1,9 @@
 function buildScholarQuery(item: Zotero.Item): string {
-  const doi = (item.getField("DOI") as string) || "";
-  if (doi) return doi;
-
   const title =
     (item.getField("title") as string) ||
     (item.getField("shortTitle") as string) ||
     "";
-  const creator = item.firstCreator || "";
-  const query = [title, creator].filter((v) => v && v.trim().length > 0).join(" ");
+  const query = title.trim();
   return query || `Zotero Item ${item.id}`;
 }
 
