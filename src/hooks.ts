@@ -17,6 +17,7 @@ import {
   unregisterTranslationEditDblClick,
 } from "./modules/translationEditor";
 import { openTranslationProgressDialog } from "./modules/translationProgress";
+import { openScholarForSelection } from "./modules/scholarSearch";
 import { getString, initLocale } from "./utils/locale";
 import { registerPrefsScripts } from "./modules/preferenceScript";
 import { createZToolkit } from "./utils/ztoolkit";
@@ -91,6 +92,8 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
   UIExampleFactory.registerRightClickMenuHtmlItem();
 
   UIExampleFactory.registerRightClickMenuHtmlTranslateItem();
+
+  UIExampleFactory.registerRightClickMenuScholarItem();
 
   UIExampleFactory.registerWindowMenuTranslationProgress();
 
@@ -214,6 +217,9 @@ function onDialogEvents(type: string) {
       break;
     case "translationProgress":
       openTranslationProgressDialog();
+      break;
+    case "openScholar":
+      openScholarForSelection();
       break;
     default:
       break;

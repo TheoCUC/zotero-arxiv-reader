@@ -236,6 +236,18 @@ export class UIExampleFactory {
   }
 
   @example
+  static registerRightClickMenuScholarItem() {
+    const menuIcon = `chrome://${addon.data.config.addonRef}/content/icons/favicon@0.5x.png`;
+    ztoolkit.Menu.register("item", {
+      tag: "menuitem",
+      id: "zotero-itemmenu-google-scholar",
+      label: "Google Scholar 搜索",
+      icon: menuIcon,
+      commandListener: () => addon.hooks.onDialogEvents("openScholar"),
+    });
+  }
+
+  @example
   static registerWindowMenuWithSeparator() {
     ztoolkit.Menu.register("menuFile", {
       tag: "menuseparator",
