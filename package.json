@@ -1,10 +1,10 @@
 {
-  "name": "zotero-plugin-template",
+  "name": "zotero-arxiv-reader",
   "type": "module",
-  "version": "0.0.0",
-  "description": "Zotero Plugin Template",
+  "version": "0.0.1",
+  "description": "Zotero plugin for arXiv HTML fetch, cleanup, and bilingual translation.",
   "config": {
-    "addonName": "Zotero Plugin Template",
+    "addonName": "arXiv Reader",
     "addonID": "arxiv-reader@local",
     "addonRef": "arxiv-reader",
     "addonInstance": "ArxivReader",
@@ -12,13 +12,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/windingwind/zotero-plugin-template.git"
+    "url": "git+https://github.com/yourname/zotero-arxiv-reader.git"
   },
-  "author": "windingwind",
+  "author": "arXiv Reader contributors",
   "bugs": {
-    "url": "https://github.com/windingwind/zotero-plugin-template/issues"
+    "url": "https://github.com/yourname/zotero-arxiv-reader/issues"
   },
-  "homepage": "https://github.com/windingwind/zotero-plugin-template#readme",
+  "homepage": "https://github.com/yourname/zotero-arxiv-reader#readme",
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "start": "zotero-plugin serve",
