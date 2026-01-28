@@ -5,7 +5,7 @@ import {
   PromptExampleFactory,
   UIExampleFactory,
 } from "./modules/examples";
-import { showArxivUrlDebug } from "./modules/arxivDebug";
+import { attachArxivHtmlForSelection } from "./modules/arxivDebug";
 import { getString, initLocale } from "./utils/locale";
 import { registerPrefsScripts } from "./modules/preferenceScript";
 import { createZToolkit } from "./utils/ztoolkit";
@@ -180,7 +180,7 @@ function onDialogEvents(type: string) {
       HelperExampleFactory.vtableExample();
       break;
     case "arxivDebug":
-      void showArxivUrlDebug();
+      void attachArxivHtmlForSelection();
       break;
     default:
       break;
