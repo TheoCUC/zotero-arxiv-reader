@@ -1,4 +1,11 @@
 import { translateText } from "./translationService";
+import {
+  addTranslationLog,
+  finishTranslationProgress,
+  incrementTranslationProgress,
+  setTranslationStatus,
+  startTranslationProgress,
+} from "./translationProgress";
 
 const TRANSLATION_CLASS = "zr-translation-block";
 const TRANSLATION_ATTR = "data-zotero-translation";
@@ -73,6 +80,7 @@ function insertTranslation(paragraph: Element, text: string) {
 
 async function translateHtmlAttachment(
   item: Zotero.Item,
+  onTranslated?: () => void,
 ): Promise<TranslateResult> {
   if (!item.isAttachment() || !isHtmlAttachment(item)) {
     const title = (item.getField("title") as string) || `Item ${item.id}`;
@@ -106,6 +114,7 @@ async function translateHtmlAttachment(
       if (!translated) continue;
       insertTranslation(paragraph, translated);
       translatedCount += 1;
+      if (onTranslated) onTranslated();
     } catch (error: any) {
       errorReason = error?.message ? String(error.message) : String(error);
       break;
@@ -133,6 +142,26 @@ async function translateHtmlAttachment(
   return { status: "translated", title, count: translatedCount };
 }
 
+async function countTranslatableParagraphs(item: Zotero.Item): Promise<number> {
+  if (!item.isAttachment() || !isHtmlAttachment(item)) {
+    return 0;
+  }
+  const filePath = await item.getFilePathAsync();
+  if (!filePath) return 0;
+  const html = (await Zotero.File.getContentsAsync(filePath)) as string;
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  const paragraphs = getParagraphs(doc);
+  let count = 0;
+  for (const paragraph of paragraphs) {
+    if (alreadyTranslated(paragraph)) continue;
+    const text = paragraph.textContent?.trim() || "";
+    if (!text) continue;
+    count += 1;
+  }
+  return count;
+}
+
 export async function translateHtmlForSelection(): Promise<void> {
   const items = ztoolkit.getGlobal("ZoteroPane").getSelectedItems();
   const alert = ztoolkit.getGlobal("alert") as (msg: string) => void;
@@ -142,8 +171,21 @@ export async function translateHtmlForSelection(): Promise<void> {
   }
 
   const results: TranslateResult[] = [];
+  const counts = await Promise.all(
+    items.map((item) => countTranslatableParagraphs(item)),
+  );
+  const total = counts.reduce((sum, value) => sum + value, 0);
+  startTranslationProgress(total);
+  let done = 0;
+  const onTranslated = () => {
+    done += 1;
+    incrementTranslationProgress(1);
+  };
+
   for (const item of items) {
-    results.push(await translateHtmlAttachment(item));
+    const title = (item.getField("title") as string) || `Item ${item.id}`;
+    setTranslationStatus(`翻译中：${title}`);
+    results.push(await translateHtmlAttachment(item, onTranslated));
   }
 
   const translated = results.filter((r) => r.status === "translated") as Array<
@@ -188,6 +230,30 @@ export async function translateHtmlForSelection(): Promise<void> {
         .join("\n")}`,
     );
   }
+
+  if (translated.length > 0) {
+    translated.forEach((r) =>
+      addTranslationLog(`[完成] ${r.title}（${r.count} 段）`),
+    );
+  }
+  if (partial.length > 0) {
+    partial.forEach((r) =>
+      addTranslationLog(`[部分] ${r.title}（${r.count} 段，${r.reason}）`),
+    );
+  }
+  if (skipped.length > 0) {
+    skipped.forEach((r) =>
+      addTranslationLog(`[跳过] ${r.title}（${r.reason}）`),
+    );
+  }
+  if (failed.length > 0) {
+    failed.forEach((r) =>
+      addTranslationLog(`[失败] ${r.title}（${r.reason}）`),
+    );
+  }
+  finishTranslationProgress(
+    failed.length > 0 || partial.length > 0 ? "完成（部分失败）" : "完成",
+  );
 
   alert(messages.join("\n\n"));
 }

@@ -35,7 +35,15 @@ function parseJsonArray<T>(raw: string, fallback: T[]): T[] {
   }
 }
 
-function checkRateLimit(rpm: number) {
+async function sleep(ms: number) {
+  if (Zotero?.Promise?.delay) {
+    await Zotero.Promise.delay(ms);
+    return;
+  }
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForRateLimit(rpm: number) {
   if (!Number.isFinite(rpm) || rpm <= 0) return;
   const now = Date.now();
   const windowMs = 60_000;
@@ -44,10 +52,11 @@ function checkRateLimit(rpm: number) {
   }
   if (recentRequests.length >= rpm) {
     const waitMs = windowMs - (now - recentRequests[0]);
-    const waitSec = Math.ceil(waitMs / 1000);
-    throw new Error(`请求过于频繁，请在 ${waitSec} 秒后重试。`);
+    if (waitMs > 0) {
+      await sleep(waitMs);
+    }
   }
-  recentRequests.push(now);
+  recentRequests.push(Date.now());
 }
 
 function parseJsonObject<T>(raw: string): T {
@@ -131,12 +140,24 @@ function extractResponseContent(data: any): string {
   return content;
 }
 
+function isRateLimitError(
+  status: number,
+  data: any,
+  responseText: string,
+): boolean {
+  if (status === 429) return true;
+  const message =
+    (data?.error?.message as string) ||
+    (typeof responseText === "string" ? responseText : "");
+  if (!message) return false;
+  return /rate\s*limit|too\s+many\s+requests|rpm/i.test(message);
+}
+
 export async function translateText(
   text: string,
   options: TranslateOptions = {},
 ): Promise<string> {
   const { baseUrl, apiKey, model, rpm } = getTranslationConfig();
-  checkRateLimit(rpm);
   const prompts = getSelectedPrompts(options.promptIds);
   const systemPrompt = buildSystemPrompt(prompts);
   const messages = systemPrompt
@@ -153,15 +174,40 @@ export async function translateText(
     temperature: 0.2,
   });
 
-  const xhr = await Zotero.HTTP.request("POST", url, {
-    body,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-  });
+  while (true) {
+    await waitForRateLimit(rpm);
+    const xhr = await Zotero.HTTP.request("POST", url, {
+      body,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      successCodes: false,
+    });
 
-  const responseText = xhr.responseText || "";
-  const data = parseJsonObject<any>(responseText);
-  return extractResponseContent(data);
+    const responseText = xhr.responseText || "";
+    let data: any = null;
+    try {
+      data = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      data = null;
+    }
+
+    if (xhr.status >= 200 && xhr.status < 300) {
+      if (!data) {
+        throw new Error("翻译接口返回为空。");
+      }
+      return extractResponseContent(data);
+    }
+
+    if (isRateLimitError(xhr.status, data, responseText)) {
+      await sleep(60_000);
+      continue;
+    }
+
+    const errorMessage =
+      data?.error?.message ||
+      `HTTP ${xhr.status}: ${xhr.statusText || "请求失败"}`;
+    throw new Error(String(errorMessage));
+  }
 }

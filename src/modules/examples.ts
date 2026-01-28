@@ -249,6 +249,16 @@ export class UIExampleFactory {
   }
 
   @example
+  static registerWindowMenuTranslationProgress() {
+    ztoolkit.Menu.register("menuTools", {
+      tag: "menuitem",
+      id: "zotero-menu-translation-progress",
+      label: "翻译进度",
+      commandListener: () => addon.hooks.onDialogEvents("translationProgress"),
+    });
+  }
+
+  @example
   static async registerExtraColumn() {
     const field = "test1";
     await Zotero.ItemTreeManager.registerColumns({
