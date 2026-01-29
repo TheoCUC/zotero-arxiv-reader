@@ -11,6 +11,15 @@ type TranslateOptions = {
   promptIds?: string[];
 };
 
+export type TranslateProvider = {
+  id: string;
+  name: string;
+  apiBaseUrl: string;
+  apiKey: string;
+  model: string;
+  rpm: number;
+};
+
 const DEFAULT_PROMPTS: TranslatePrompt[] = [
   {
     id: "translate-zh",
@@ -24,7 +33,7 @@ const DEFAULT_PROMPTS: TranslatePrompt[] = [
   },
 ];
 
-const recentRequests: number[] = [];
+const recentRequestsByProvider = new Map<string, number[]>();
 
 function parseJsonArray<T>(raw: string, fallback: T[]): T[] {
   if (!raw) return fallback;
@@ -36,6 +45,24 @@ function parseJsonArray<T>(raw: string, fallback: T[]): T[] {
   }
 }
 
+function parseProviders(raw: string): TranslateProvider[] {
+  const list = parseJsonArray<TranslateProvider>(raw, []);
+  return list
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const provider = item as TranslateProvider;
+      return {
+        id: String(provider.id ?? "").trim(),
+        name: String(provider.name ?? "").trim(),
+        apiBaseUrl: String(provider.apiBaseUrl ?? "").trim(),
+        apiKey: String(provider.apiKey ?? "").trim(),
+        model: String(provider.model ?? "").trim(),
+        rpm: Number(provider.rpm ?? 0),
+      };
+    })
+    .filter((provider) => provider.id && provider.name && provider.apiBaseUrl);
+}
+
 async function sleep(ms: number) {
   if (Zotero?.Promise?.delay) {
     await Zotero.Promise.delay(ms);
@@ -44,8 +71,18 @@ async function sleep(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForRateLimit(rpm: number) {
+function getRequestBucket(providerId: string): number[] {
+  let bucket = recentRequestsByProvider.get(providerId);
+  if (!bucket) {
+    bucket = [];
+    recentRequestsByProvider.set(providerId, bucket);
+  }
+  return bucket;
+}
+
+async function waitForRateLimit(rpm: number, providerId: string) {
   if (!Number.isFinite(rpm) || rpm <= 0) return;
+  const recentRequests = getRequestBucket(providerId);
   const now = Date.now();
   const windowMs = 60_000;
   while (recentRequests.length > 0 && now - recentRequests[0] >= windowMs) {
@@ -94,11 +131,9 @@ function buildSystemPrompt(prompts: TranslatePrompt[]): string {
     .join("\n\n");
 }
 
-function getTranslationConfig() {
+function getLegacyProvider(): TranslateProvider {
   const baseUrlRaw =
-    (getPref("translationApiBaseUrl") as string) ||
-    "https://api.openai.com/v1";
-  const baseUrl = baseUrlRaw.replace(/\/+$/, "");
+    (getPref("translationApiBaseUrl") as string) || "https://api.openai.com/v1";
   const apiKey = (getPref("translationApiKey") as string) || "";
   const model = (getPref("translationModel") as string) || "gpt-4o-mini";
   const rpmRaw = getPref("translationRPM");
@@ -108,10 +143,75 @@ function getTranslationConfig() {
       : typeof rpmRaw === "string"
         ? Number(rpmRaw)
         : 0;
+  return {
+    id: "legacy",
+    name: "Legacy",
+    apiBaseUrl: baseUrlRaw,
+    apiKey,
+    model,
+    rpm,
+  };
+}
+
+function getAllProviders(): TranslateProvider[] {
+  const providers = parseProviders(
+    (getPref("translationProviders") as string) || "",
+  );
+  return providers.length > 0 ? providers : [getLegacyProvider()];
+}
+
+function resolveSelectedProvider(): TranslateProvider {
+  const providers = getAllProviders();
+  const selectedId = (getPref("translationProviderSelection") as string) || "";
+  return (
+    providers.find((provider) => provider.id === selectedId) || providers[0]
+  );
+}
+
+function normalizeProvider(provider: TranslateProvider) {
+  const baseUrl = provider.apiBaseUrl.replace(/\/+$/, "");
+  const apiKey = provider.apiKey || "";
   if (!apiKey) {
     throw new Error("translationApiKey 未配置。");
   }
-  return { baseUrl, apiKey, model, rpm };
+  return {
+    baseUrl,
+    apiKey,
+    model: provider.model || "gpt-4o-mini",
+    rpm: provider.rpm || 0,
+    id: provider.id || "unknown",
+    name: provider.name || provider.id || "unknown",
+  };
+}
+
+export function getParallelProviders(): TranslateProvider[] {
+  const enabled = Boolean(getPref("translationParallelEnabled"));
+  const providers = getAllProviders();
+  if (!enabled) {
+    return [resolveSelectedProvider()];
+  }
+  const selectedIds = parseSelections(
+    (getPref("translationParallelProviders") as string) || "",
+  );
+  if (selectedIds.length === 0) {
+    return [resolveSelectedProvider()];
+  }
+  const selected = providers.filter((provider) =>
+    selectedIds.includes(provider.id),
+  );
+  return selected.length > 0 ? selected : [resolveSelectedProvider()];
+}
+
+function getTranslationConfig() {
+  const selected = resolveSelectedProvider();
+  const normalized = normalizeProvider(selected);
+  return {
+    baseUrl: normalized.baseUrl,
+    apiKey: normalized.apiKey,
+    model: normalized.model,
+    rpm: normalized.rpm,
+    providerId: normalized.id,
+  };
 }
 
 function getSelectedPrompts(promptIds?: string[]): TranslatePrompt[] {
@@ -168,7 +268,7 @@ export async function translateText(
   text: string,
   options: TranslateOptions = {},
 ): Promise<string> {
-  const { baseUrl, apiKey, model, rpm } = getTranslationConfig();
+  const { baseUrl, apiKey, model, rpm, providerId } = getTranslationConfig();
   const prompts = getSelectedPrompts(options.promptIds);
   const systemPrompt = buildSystemPrompt(prompts);
   const messages = systemPrompt
@@ -186,12 +286,72 @@ export async function translateText(
   });
 
   while (true) {
-    await waitForRateLimit(rpm);
+    await waitForRateLimit(rpm, providerId);
     const xhr = await Zotero.HTTP.request("POST", url, {
       body,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
+      },
+      successCodes: false,
+    });
+
+    const responseText = xhr.responseText || "";
+    let data: any = null;
+    try {
+      data = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      data = null;
+    }
+
+    if (xhr.status >= 200 && xhr.status < 300) {
+      if (!data) {
+        throw new Error("翻译接口返回为空。");
+      }
+      return extractResponseContent(data);
+    }
+
+    if (isRateLimitError(xhr.status, data, responseText)) {
+      await sleep(60_000);
+      continue;
+    }
+
+    const errorMessage =
+      data?.error?.message ||
+      `HTTP ${xhr.status}: ${xhr.statusText || "请求失败"}`;
+    throw new Error(String(errorMessage));
+  }
+}
+
+export async function translateTextWithProvider(
+  text: string,
+  provider: TranslateProvider,
+  options: TranslateOptions = {},
+): Promise<string> {
+  const normalized = normalizeProvider(provider);
+  const prompts = getSelectedPrompts(options.promptIds);
+  const systemPrompt = buildSystemPrompt(prompts);
+  const messages = systemPrompt
+    ? [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: text },
+      ]
+    : [{ role: "user", content: text }];
+
+  const url = `${normalized.baseUrl}/chat/completions`;
+  const body = JSON.stringify({
+    model: normalized.model,
+    messages,
+    temperature: 0.2,
+  });
+
+  while (true) {
+    await waitForRateLimit(normalized.rpm, normalized.id);
+    const xhr = await Zotero.HTTP.request("POST", url, {
+      body,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${normalized.apiKey}`,
       },
       successCodes: false,
     });

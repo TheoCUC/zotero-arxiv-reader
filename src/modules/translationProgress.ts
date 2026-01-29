@@ -5,6 +5,14 @@ type ProgressState = {
   done: number;
   status: string;
   logs: string[];
+  providers: Array<{
+    id: string;
+    name: string;
+    total: number;
+    done: number;
+    failed: number;
+    error?: string;
+  }>;
 };
 
 const state: ProgressState = {
@@ -12,6 +20,7 @@ const state: ProgressState = {
   done: 0,
   status: "等待中",
   logs: [],
+  providers: [],
 };
 
 let dialogHelper: DialogHelper | null = null;
@@ -43,6 +52,41 @@ function updateDialogUI() {
   if (logEl) {
     logEl.textContent = state.logs.join("\n");
   }
+
+  const providerSection = doc.getElementById(
+    "zr-translation-providers",
+  ) as HTMLElement | null;
+  if (providerSection) {
+    providerSection.textContent = "";
+    if (state.providers.length === 0) {
+      providerSection.style.display = "none";
+    } else {
+      providerSection.style.display = "block";
+      for (const provider of state.providers) {
+        const row = doc.createElement("div");
+        row.style.display = "flex";
+        row.style.alignItems = "center";
+        row.style.gap = "6px";
+        const name = doc.createElement("strong");
+        name.textContent = provider.name;
+        const progress = doc.createElement("span");
+        progress.textContent = `${provider.done}/${provider.total}`;
+        row.appendChild(name);
+        row.appendChild(progress);
+        if (provider.failed > 0) {
+          const failed = doc.createElement("span");
+          failed.textContent = `失败 ${provider.failed}`;
+          row.appendChild(failed);
+        }
+        if (provider.error) {
+          const error = doc.createElement("span");
+          error.textContent = provider.error;
+          row.appendChild(error);
+        }
+        providerSection.appendChild(row);
+      }
+    }
+  }
 }
 
 export function startTranslationProgress(total: number) {
@@ -50,6 +94,7 @@ export function startTranslationProgress(total: number) {
   state.done = 0;
   state.status = total > 0 ? "翻译中" : "无可翻译段落";
   state.logs = [];
+  state.providers = [];
   updateDialogUI();
 }
 
@@ -76,6 +121,13 @@ export function finishTranslationProgress(status: string) {
   updateDialogUI();
 }
 
+export function setTranslationProviderProgress(
+  providers: ProgressState["providers"],
+) {
+  state.providers = providers;
+  updateDialogUI();
+}
+
 export function openTranslationProgressDialog() {
   if (dialogWindow && !dialogWindow.closed) {
     dialogWindow.focus();
@@ -94,7 +146,7 @@ export function openTranslationProgressDialog() {
     },
   };
 
-  dialogHelper = new ztoolkit.Dialog(6, 1)
+  dialogHelper = new ztoolkit.Dialog(7, 1)
     .addCell(0, 0, {
       tag: "div",
       namespace: "html",
@@ -120,10 +172,25 @@ export function openTranslationProgressDialog() {
     .addCell(3, 0, {
       tag: "div",
       namespace: "html",
-      properties: { innerHTML: "<strong>日志</strong>" },
+      properties: { innerHTML: "<strong>服务商进度</strong>" },
       styles: { margin: "6px 0 4px 0" },
     })
     .addCell(4, 0, {
+      tag: "div",
+      namespace: "html",
+      attributes: { id: "zr-translation-providers" },
+      styles: {
+        marginBottom: "8px",
+        display: "none",
+      },
+    })
+    .addCell(5, 0, {
+      tag: "div",
+      namespace: "html",
+      properties: { innerHTML: "<strong>日志</strong>" },
+      styles: { margin: "6px 0 4px 0" },
+    })
+    .addCell(6, 0, {
       tag: "pre",
       namespace: "html",
       attributes: { id: "zr-translation-log" },

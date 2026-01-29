@@ -8,10 +8,15 @@ declare namespace _ZoteroTypes {
   interface Prefs {
     PluginPrefsMap: {
       "htmlBlocklist": string;
+      "inlineCss": boolean;
       "translationApiBaseUrl": string;
       "translationApiKey": string;
       "translationModel": string;
       "translationRPM": number;
+      "translationProviders": string;
+      "translationProviderSelection": string;
+      "translationParallelEnabled": boolean;
+      "translationParallelProviders": string;
       "translationPrompts": string;
       "translationPromptSelection": string;
     };

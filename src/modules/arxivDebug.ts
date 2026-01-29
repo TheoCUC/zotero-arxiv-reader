@@ -1,9 +1,9 @@
+import { getPref } from "../utils/prefs";
+
 const ARXIV_URL_RE =
   /https?:\/\/(?:www\.)?arxiv\.org\/(abs|pdf|format)\/([^?#\s]+)(?:\.pdf)?/i;
-const ARXIV_ABS_RE =
-  /https?:\/\/(?:www\.)?arxiv\.org\/abs\/([^?#\s]+)/i;
-const ARXIV_ID_RE =
-  /\b(?:arxiv:)?([a-z-]+\/\d{7}|\d{4}\.\d{4,5})(v\d+)?\b/i;
+const ARXIV_ABS_RE = /https?:\/\/(?:www\.)?arxiv\.org\/abs\/([^?#\s]+)/i;
+const ARXIV_ID_RE = /\b(?:arxiv:)?([a-z-]+\/\d{7}|\d{4}\.\d{4,5})(v\d+)?\b/i;
 const ARXIV_DOI_RE = /10\.48550\/arXiv\.(\d{4}\.\d{4,5})(v\d+)?/i;
 
 function normalizeArxivUrl(url: string): string | null {
@@ -52,10 +52,30 @@ function serializeDocument(doc: Document, originalHtml: string): string {
   return `${doctype}${html}`;
 }
 
+function ensureDirectoryUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.pathname.endsWith("/")) return parsed.toString();
+    const lastSegment = parsed.pathname.split("/").pop() || "";
+    if (lastSegment.includes(".")) return parsed.toString();
+    parsed.pathname += "/";
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+async function fetchText(url: string): Promise<string | null> {
+  const xhr = await Zotero.HTTP.request("GET", url, {
+    successCodes: false,
+  });
+  if (xhr.status < 200 || xhr.status >= 300) return null;
+  return xhr.responseText || "";
+}
+
 function resolveCssUrls(cssText: string, cssUrl: string): string {
   const urlRe = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
-  const importRe =
-    /@import\s+(?:url\()?['"]?([^'")]+)['"]?\)?\s*;/gi;
+  const importRe = /@import\s+(?:url\()?['"]?([^'")]+)['"]?\)?\s*;/gi;
   const rewrite = (raw: string) => {
     if (
       raw.startsWith("data:") ||
@@ -83,16 +103,109 @@ function resolveCssUrls(cssText: string, cssUrl: string): string {
   return result;
 }
 
+async function inlineCssImports(
+  cssText: string,
+  baseUrl: string,
+  visited: Set<string>,
+): Promise<string> {
+  const importRe =
+    /@import\s+(?:url\()?\s*(['"]?)([^'")\s]+)\1\s*\)?\s*([^;]*);/gi;
+  let result = "";
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = importRe.exec(cssText))) {
+    result += cssText.slice(lastIndex, match.index);
+    lastIndex = importRe.lastIndex;
+    const importPath = String(match[2] || "");
+    let importUrl = "";
+    try {
+      importUrl = new URL(importPath, baseUrl).toString();
+    } catch {
+      result += match[0];
+      continue;
+    }
+    let importedText: string | null = null;
+    if (!visited.has(importUrl)) {
+      importedText = await fetchText(importUrl);
+    }
+    if (!importedText) {
+      const dirBase = ensureDirectoryUrl(baseUrl);
+      if (dirBase !== baseUrl) {
+        try {
+          const altUrl = new URL(importPath, dirBase).toString();
+          if (!visited.has(altUrl)) {
+            importedText = await fetchText(altUrl);
+            if (importedText) importUrl = altUrl;
+          }
+        } catch {
+          // fall through to keep original @import
+        }
+      }
+    }
+    if (!importedText) {
+      result += match[0];
+      continue;
+    }
+    visited.add(importUrl);
+    const inlined = await inlineCssImports(importedText, importUrl, visited);
+    const resolved = resolveCssUrls(inlined, importUrl);
+    result += `\n/* inlined: ${importUrl} */\n${resolved}\n`;
+  }
+  result += cssText.slice(lastIndex);
+  return resolveCssUrls(result, baseUrl);
+}
+
+async function inlineStyleTagImports(
+  htmlUrl: string,
+  doc: Document,
+): Promise<boolean> {
+  const styles = Array.from(
+    doc.querySelectorAll("style"),
+  ) as HTMLStyleElement[];
+  if (styles.length === 0) return false;
+  const visited = new Set<string>();
+  let changed = false;
+  for (const style of styles) {
+    const text = style.textContent || "";
+    if (!text.includes("@import")) continue;
+    const inlined = await inlineCssImports(text, htmlUrl, visited);
+    if (inlined !== text) changed = true;
+    style.textContent = inlined;
+  }
+  return changed;
+}
+
 async function inlineStylesheets(htmlUrl: string, attachment: Zotero.Item) {
   const filePath = await attachment.getFilePathAsync();
   if (!filePath) return;
-  const html = (await Zotero.File.getContentsAsync(filePath)) as string;
+  const htmlBaseUrl = ensureDirectoryUrl(htmlUrl);
+  const html = (await Zotero.File.getContentsAsync(
+    filePath,
+    "utf-8",
+  )) as string;
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
-  const links = Array.from(
-    doc.querySelectorAll('link[rel~="stylesheet"][href]'),
+  const rawLinks = Array.from(
+    doc.querySelectorAll("link[rel][href]"),
   ) as HTMLLinkElement[];
-  if (links.length === 0) return;
+  const links = rawLinks.filter((link) => {
+    const rel = (link.getAttribute("rel") || "").toLowerCase();
+    if (rel.includes("stylesheet")) return true;
+    if (rel.includes("preload")) {
+      const as = (link.getAttribute("as") || "").toLowerCase();
+      return as === "style";
+    }
+    return false;
+  });
+  const visited = new Set<string>();
+  if (links.length === 0) {
+    const styleChanged = await inlineStyleTagImports(htmlBaseUrl, doc);
+    if (styleChanged) {
+      const updated = serializeDocument(doc, html);
+      await Zotero.File.putContentsAsync(filePath, updated, "utf-8");
+    }
+    return;
+  }
 
   let changed = false;
   for (const link of links) {
@@ -100,29 +213,44 @@ async function inlineStylesheets(htmlUrl: string, attachment: Zotero.Item) {
     if (!href) continue;
     let cssUrl: string;
     try {
-      cssUrl = new URL(href, htmlUrl).toString();
+      cssUrl = new URL(href, htmlBaseUrl).toString();
     } catch {
       continue;
     }
-    const xhr = await Zotero.HTTP.request("GET", cssUrl, {
-      successCodes: false,
-    });
-    if (xhr.status < 200 || xhr.status >= 300) {
-      continue;
+    let cssText = await fetchText(cssUrl);
+    if (!cssText) {
+      const altBase = ensureDirectoryUrl(htmlUrl);
+      if (altBase !== htmlBaseUrl) {
+        try {
+          const altUrl = new URL(href, altBase).toString();
+          cssText = await fetchText(altUrl);
+          if (cssText) cssUrl = altUrl;
+        } catch {
+          // ignore
+        }
+      }
     }
-    const cssText = resolveCssUrls(xhr.responseText || "", cssUrl);
+    if (!cssText) continue;
+    const inlinedText = await inlineCssImports(cssText, cssUrl, visited);
     const style = doc.createElement("style");
     style.setAttribute("data-zotero-inline-css", "true");
-    style.textContent = cssText;
+    style.textContent = inlinedText;
     link.parentNode?.insertBefore(style, link);
     link.remove();
     changed = true;
   }
 
+  const styleChanged = await inlineStyleTagImports(htmlBaseUrl, doc);
+  changed = changed || styleChanged;
+
   if (changed) {
     const updated = serializeDocument(doc, html);
     await Zotero.File.putContentsAsync(filePath, updated, "utf-8");
   }
+}
+
+function shouldInlineCss(): boolean {
+  return Boolean(getPref("inlineCss"));
 }
 
 function findArxivUrlInItem(item: Zotero.Item): string | null {
@@ -181,7 +309,9 @@ function isHtmlAttachment(item: Zotero.Item): boolean {
   );
 }
 
-async function getHtmlAttachments(parentItem: Zotero.Item): Promise<Zotero.Item[]> {
+async function getHtmlAttachments(
+  parentItem: Zotero.Item,
+): Promise<Zotero.Item[]> {
   const attachmentIds = parentItem.getAttachments?.() || [];
   if (attachmentIds.length === 0) return [];
   const attachments = await Zotero.Items.getAsync(attachmentIds);
@@ -214,10 +344,7 @@ function getUniqueFileName(baseName: string, existing: Set<string>): string {
 
 type DuplicateAction = "overwrite" | "rename" | "cancel";
 
-function promptDuplicateAction(
-  title: string,
-  count: number,
-): DuplicateAction {
+function promptDuplicateAction(title: string, count: number): DuplicateAction {
   const Services = ztoolkit.getGlobal("Services") as any;
   const promptSvc = Services?.prompt;
   if (!promptSvc) return "cancel";
@@ -250,9 +377,16 @@ type AttachResult =
   | { status: "failed"; title: string; reason: string }
   | { status: "skipped"; title: string; reason: string };
 
-async function attachArxivHtml(item: Zotero.Item): Promise<AttachResult> {
+type ProgressReporter = (message: string) => void;
+
+async function attachArxivHtml(
+  item: Zotero.Item,
+  report?: ProgressReporter,
+): Promise<AttachResult> {
   const parentItem = resolveParentItem(item);
-  const title = (parentItem.getField("title") as string) || `Item ${parentItem.id}`;
+  const title =
+    (parentItem.getField("title") as string) || `Item ${parentItem.id}`;
+  report?.(`准备抓取：${title}`);
   const absUrl = await findArxivUrl(item);
   if (!absUrl) {
     return { status: "missing", title, reason: "未找到 arXiv URL" };
@@ -292,6 +426,7 @@ async function attachArxivHtml(item: Zotero.Item): Promise<AttachResult> {
   const attachmentTitle = arxivId ? `arXiv HTML (${arxivId})` : "arXiv HTML";
 
   try {
+    report?.(`下载 HTML：${title}`);
     const attachment = await Zotero.Attachments.importFromURL({
       libraryID: parentItem.libraryID,
       url: htmlUrl,
@@ -300,7 +435,11 @@ async function attachArxivHtml(item: Zotero.Item): Promise<AttachResult> {
       fileBaseName,
       contentType: "text/html",
     });
-    await inlineStylesheets(htmlUrl, attachment);
+    if (shouldInlineCss()) {
+      report?.(`内嵌 CSS：${title}`);
+      await inlineStylesheets(htmlUrl, attachment);
+    }
+    report?.(`完成：${title}`);
     return { status: "attached", title, url: htmlUrl };
   } catch (error: any) {
     return {
@@ -327,9 +466,35 @@ export async function attachArxivHtmlForSelection(): Promise<void> {
     }
   }
 
+  const total = uniqueParents.size;
+  const progressWin =
+    total > 0
+      ? new ztoolkit.ProgressWindow(addon.data.config.addonName, {
+          closeOnClick: true,
+          closeTime: -1,
+        })
+          .createLine({
+            text: `抓取进度：0/${total} (0%)`,
+            type: "default",
+            progress: 0,
+          })
+          .show()
+      : null;
+  let done = 0;
+  const report = (message: string) => {
+    if (!progressWin || total === 0) return;
+    const percent = Math.round((done / total) * 100);
+    progressWin.changeLine({
+      progress: percent,
+      text: `抓取进度：${done}/${total} (${percent}%)\n${message}`,
+    });
+  };
+
   const results: AttachResult[] = [];
   for (const item of uniqueParents.values()) {
-    results.push(await attachArxivHtml(item));
+    results.push(await attachArxivHtml(item, (message) => report(message)));
+    done += 1;
+    report("下一项");
   }
   const attached = results.filter((r) => r.status === "attached") as Array<
     Extract<AttachResult, { status: "attached" }>
@@ -368,10 +533,16 @@ export async function attachArxivHtmlForSelection(): Promise<void> {
   }
   if (skipped.length > 0) {
     messages.push(
-      `已取消：\n${skipped
-        .map((r) => `${r.title}（${r.reason}）`)
-        .join("\n")}`,
+      `已取消：\n${skipped.map((r) => `${r.title}（${r.reason}）`).join("\n")}`,
     );
+  }
+
+  if (progressWin) {
+    progressWin.changeLine({
+      progress: 100,
+      text: `抓取完成：${done}/${total} (100%)`,
+    });
+    progressWin.startCloseTimer(4000);
   }
 
   alert(messages.join("\n\n"));

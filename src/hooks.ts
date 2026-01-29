@@ -23,7 +23,18 @@ async function onStartup() {
   ]);
 
   initLocale();
-  registerPreferencePane();
+  try {
+    Zotero.debug("[arXiv Reader] Registering preference pane...");
+    registerPreferencePane();
+    Zotero.debug("[arXiv Reader] Preference pane registered.");
+  } catch (error: any) {
+    Zotero.logError(error);
+    Zotero.debug(
+      `[arXiv Reader] Preference pane registration failed: ${
+        error?.message ? String(error.message) : String(error)
+      }`,
+    );
+  }
 
   await Promise.all(
     Zotero.getMainWindows().map((win) => onMainWindowLoad(win)),
@@ -75,7 +86,18 @@ async function onNotify(
 async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   switch (type) {
     case "load":
-      registerPrefsScripts(data.window);
+      try {
+        Zotero.debug("[arXiv Reader] Preference pane loaded.");
+        registerPrefsScripts(data.window);
+        Zotero.debug("[arXiv Reader] Preference pane scripts initialized.");
+      } catch (error: any) {
+        Zotero.logError(error);
+        Zotero.debug(
+          `[arXiv Reader] Preference pane init failed: ${
+            error?.message ? String(error.message) : String(error)
+          }`,
+        );
+      }
       break;
     default:
       return;

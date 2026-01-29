@@ -1,8 +1,13 @@
-import { translateText } from "./translationService";
+import {
+  getParallelProviders,
+  translateTextWithProvider,
+} from "./translationService";
 import {
   addTranslationLog,
   finishTranslationProgress,
   incrementTranslationProgress,
+  openTranslationProgressDialog,
+  setTranslationProviderProgress,
   setTranslationStatus,
   startTranslationProgress,
 } from "./translationProgress";
@@ -27,6 +32,15 @@ type TranslateResult =
   | { status: "partial"; title: string; count: number; reason: string }
   | { status: "skipped"; title: string; reason: string }
   | { status: "failed"; title: string; reason: string };
+
+type ProviderProgress = {
+  id: string;
+  name: string;
+  total: number;
+  done: number;
+  failed: number;
+  error?: string;
+};
 
 function isHtmlAttachment(item: Zotero.Item): boolean {
   const contentType = (item.attachmentContentType || "").toLowerCase();
@@ -107,19 +121,97 @@ async function translateHtmlAttachment(
 
   let translatedCount = 0;
   let errorReason = "";
-  for (const paragraph of paragraphs) {
-    if (alreadyTranslated(paragraph)) continue;
-    const text = paragraph.textContent?.trim() || "";
-    if (!text) continue;
-    try {
-      const translated = await translateText(text);
-      if (!translated) continue;
-      insertTranslation(paragraph, translated);
-      translatedCount += 1;
-      if (onTranslated) onTranslated();
-    } catch (error: any) {
-      errorReason = error?.message ? String(error.message) : String(error);
-      break;
+  const providers = getParallelProviders();
+  const providerProgress: ProviderProgress[] = providers.map((provider) => ({
+    id: provider.id,
+    name: provider.name || provider.id,
+    total: 0,
+    done: 0,
+    failed: 0,
+  }));
+  const tasks = paragraphs
+    .filter((paragraph) => !alreadyTranslated(paragraph))
+    .map((paragraph) => ({
+      paragraph,
+      text: paragraph.textContent?.trim() || "",
+    }))
+    .filter((task) => task.text.length > 0);
+
+  if (tasks.length > 0) {
+    if (providers.length <= 1) {
+      const provider = providers[0];
+      if (providerProgress.length > 0) {
+        providerProgress[0].total = tasks.length;
+        setTranslationProviderProgress(providerProgress);
+      }
+      for (const task of tasks) {
+        try {
+          const translated = await translateTextWithProvider(
+            task.text,
+            provider,
+          );
+          if (!translated) continue;
+          insertTranslation(task.paragraph, translated);
+          translatedCount += 1;
+          if (providerProgress.length > 0) {
+            providerProgress[0].done += 1;
+            setTranslationProviderProgress(providerProgress);
+          }
+          if (onTranslated) onTranslated();
+        } catch (error: any) {
+          errorReason = error?.message ? String(error.message) : String(error);
+          if (providerProgress.length > 0) {
+            providerProgress[0].failed += 1;
+            providerProgress[0].error = errorReason;
+            setTranslationProviderProgress(providerProgress);
+          }
+          break;
+        }
+      }
+    } else {
+      const queues = providers.map((provider) => ({
+        provider,
+        tasks: [] as typeof tasks,
+      }));
+      tasks.forEach((task, index) => {
+        queues[index % queues.length].tasks.push(task);
+      });
+      queues.forEach((queue, index) => {
+        providerProgress[index].total = queue.tasks.length;
+      });
+      setTranslationProviderProgress(providerProgress);
+      let aborted = false;
+      const workers = queues.map((queue, index) =>
+        (async () => {
+          for (const task of queue.tasks) {
+            if (aborted) return;
+            try {
+              const translated = await translateTextWithProvider(
+                task.text,
+                queue.provider,
+              );
+              if (!translated) continue;
+              insertTranslation(task.paragraph, translated);
+              translatedCount += 1;
+              providerProgress[index].done += 1;
+              setTranslationProviderProgress(providerProgress);
+              if (onTranslated) onTranslated();
+            } catch (error: any) {
+              if (!errorReason) {
+                errorReason = error?.message
+                  ? String(error.message)
+                  : String(error);
+              }
+              providerProgress[index].failed += 1;
+              providerProgress[index].error = errorReason;
+              setTranslationProviderProgress(providerProgress);
+              aborted = true;
+              return;
+            }
+          }
+        })(),
+      );
+      await Promise.all(workers);
     }
   }
 
@@ -166,13 +258,14 @@ async function countTranslatableParagraphs(item: Zotero.Item): Promise<number> {
 
 export async function translateHtmlForSelection(): Promise<void> {
   const items = ztoolkit.getGlobal("ZoteroPane").getSelectedItems();
-  const alert = ztoolkit.getGlobal("alert") as (msg: string) => void;
   if (!items || items.length === 0) {
+    const alert = ztoolkit.getGlobal("alert") as (msg: string) => void;
     alert("未选中条目。");
     return;
   }
 
   const results: TranslateResult[] = [];
+  openTranslationProgressDialog();
   const counts = await Promise.all(
     items.map((item) => countTranslatableParagraphs(item)),
   );
@@ -220,9 +313,7 @@ export async function translateHtmlForSelection(): Promise<void> {
   }
   if (skipped.length > 0) {
     messages.push(
-      `已跳过：\n${skipped
-        .map((r) => `${r.title}（${r.reason}）`)
-        .join("\n")}`,
+      `已跳过：\n${skipped.map((r) => `${r.title}（${r.reason}）`).join("\n")}`,
     );
   }
   if (failed.length > 0) {
@@ -256,6 +347,7 @@ export async function translateHtmlForSelection(): Promise<void> {
   finishTranslationProgress(
     failed.length > 0 || partial.length > 0 ? "完成（部分失败）" : "完成",
   );
-
-  alert(messages.join("\n\n"));
+  if (messages.length > 0) {
+    messages.forEach((message) => addTranslationLog(message));
+  }
 }

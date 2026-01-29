@@ -7,6 +7,15 @@ type TranslatePrompt = {
   content: string;
 };
 
+type TranslateProvider = {
+  id: string;
+  name: string;
+  apiBaseUrl: string;
+  apiKey: string;
+  model: string;
+  rpm: number;
+};
+
 const DEFAULT_TRANSLATION_PROMPTS: TranslatePrompt[] = [
   {
     id: "translate-zh",
@@ -31,7 +40,10 @@ function parseJsonArray<T>(raw: string, fallback: T[]): T[] {
 }
 
 function parsePrompts(raw: string): TranslatePrompt[] {
-  const list = parseJsonArray<TranslatePrompt>(raw, DEFAULT_TRANSLATION_PROMPTS);
+  const list = parseJsonArray<TranslatePrompt>(
+    raw,
+    DEFAULT_TRANSLATION_PROMPTS,
+  );
   return list
     .filter((item) => item && typeof item === "object")
     .map((item) => ({
@@ -45,6 +57,134 @@ function parsePrompts(raw: string): TranslatePrompt[] {
 function parseSelections(raw: string): string[] {
   const list = parseJsonArray<string>(raw, []);
   return list.map((item) => String(item)).filter((item) => item.length > 0);
+}
+
+function parseParallelProviders(raw: string): string[] {
+  const list = parseJsonArray<string>(raw, []);
+  return list.map((item) => String(item)).filter((item) => item.length > 0);
+}
+
+function parseProviders(raw: string): TranslateProvider[] {
+  const list = parseJsonArray<TranslateProvider>(raw, []);
+  return list
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const provider = item as TranslateProvider;
+      return {
+        id: String(provider.id ?? "").trim(),
+        name: String(provider.name ?? "").trim(),
+        apiBaseUrl: String(provider.apiBaseUrl ?? "").trim(),
+        apiKey: String(provider.apiKey ?? "").trim(),
+        model: String(provider.model ?? "").trim(),
+        rpm: Number(provider.rpm ?? 0),
+      };
+    })
+    .filter((provider) => provider.id && provider.name && provider.apiBaseUrl);
+}
+
+function resolveSelectedProviderId(
+  providers: TranslateProvider[],
+  current: string,
+): string {
+  if (current && providers.some((p) => p.id === current)) return current;
+  return providers.length > 0 ? providers[0].id : "";
+}
+
+function renderProviderSelect(
+  select: HTMLSelectElement,
+  providers: TranslateProvider[],
+  selectedId: string,
+) {
+  select.textContent = "";
+  const doc = select.ownerDocument;
+  if (!doc) return;
+  for (const provider of providers) {
+    const option = doc.createElement("option");
+    option.value = provider.id;
+    option.textContent = provider.name;
+    select.appendChild(option);
+  }
+  select.value = selectedId;
+}
+
+function renderParallelProvidersList(
+  container: HTMLElement,
+  providers: TranslateProvider[],
+  selectedIds: string[],
+  onChange: (next: string[]) => void,
+) {
+  container.textContent = "";
+  const doc = container.ownerDocument;
+  if (!doc) return;
+  const list = doc.createElement("div");
+  list.style.display = "flex";
+  list.style.flexDirection = "column";
+  list.style.gap = "4px";
+  for (const provider of providers) {
+    const row = doc.createElement("label");
+    row.style.display = "flex";
+    row.style.alignItems = "center";
+    row.style.gap = "6px";
+    const checkbox = doc.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = provider.id;
+    checkbox.checked = selectedIds.includes(provider.id);
+    checkbox.addEventListener("change", () => {
+      const next = Array.from(list.querySelectorAll("input[type=checkbox]"))
+        .filter((input) => (input as HTMLInputElement).checked)
+        .map((input) => (input as HTMLInputElement).value);
+      onChange(next);
+    });
+    const name = doc.createElement("span");
+    name.textContent = provider.name;
+    row.appendChild(checkbox);
+    row.appendChild(name);
+    list.appendChild(row);
+  }
+  container.appendChild(list);
+}
+
+function setParallelProvidersVisible(
+  labelContainer: HTMLElement | null,
+  listContainer: HTMLElement | null,
+  visible: boolean,
+) {
+  const display = visible ? "" : "none";
+  if (labelContainer) labelContainer.style.display = display;
+  if (listContainer) listContainer.style.display = display;
+}
+
+function fillProviderFields(
+  provider: TranslateProvider | null,
+  nameInput: HTMLInputElement,
+  apiBaseInput: HTMLInputElement,
+  apiKeyInput: HTMLInputElement,
+  modelInput: HTMLInputElement,
+  rpmInput: HTMLInputElement,
+) {
+  if (!provider) {
+    nameInput.value = "";
+    apiBaseInput.value = "";
+    apiKeyInput.value = "";
+    modelInput.value = "";
+    rpmInput.value = "";
+    return;
+  }
+  nameInput.value = provider.name;
+  apiBaseInput.value = provider.apiBaseUrl;
+  apiKeyInput.value = provider.apiKey;
+  modelInput.value = provider.model;
+  rpmInput.value = provider.rpm ? String(provider.rpm) : "";
+}
+
+function parseRpm(input: string, showAlert: (msg: string) => void): number {
+  if (!input) return 0;
+  const value = Number(input);
+  if (!Number.isFinite(value) || value <= 0) {
+    showAlert("RPM 需要是正数。");
+    throw new Error("Invalid RPM");
+  }
+  return Math.floor(value);
 }
 
 function resolveSelectedPromptId(
@@ -100,60 +240,275 @@ function bindPrefEvents(window: Window) {
     });
   }
 
+  const providerSelect = doc.querySelector(
+    `#zotero-prefpane-${config.addonRef}-translate-provider-select`,
+  ) as HTMLSelectElement | null;
+  const providerName = doc.querySelector(
+    `#zotero-prefpane-${config.addonRef}-translate-provider-name`,
+  ) as HTMLInputElement | null;
   const apiBaseInput = doc.querySelector(
     `#zotero-prefpane-${config.addonRef}-translate-api-base`,
   ) as HTMLInputElement | null;
-  if (apiBaseInput) {
-    const prefValue = getPref("translationApiBaseUrl");
-    if (typeof prefValue === "string") {
-      apiBaseInput.value = prefValue;
-    }
-    apiBaseInput.addEventListener("change", (e: Event) => {
-      setPref("translationApiBaseUrl", (e.target as HTMLInputElement).value);
-    });
-  }
-
-  const modelInput = doc.querySelector(
-    `#zotero-prefpane-${config.addonRef}-translate-model`,
-  ) as HTMLInputElement | null;
-  if (modelInput) {
-    const prefValue = getPref("translationModel");
-    if (typeof prefValue === "string") {
-      modelInput.value = prefValue;
-    }
-    modelInput.addEventListener("change", (e: Event) => {
-      setPref("translationModel", (e.target as HTMLInputElement).value);
-    });
-  }
-
-  const rpmInput = doc.querySelector(
-    `#zotero-prefpane-${config.addonRef}-translate-rpm`,
-  ) as HTMLInputElement | null;
-  if (rpmInput) {
-    const prefValue = getPref("translationRPM");
-    if (typeof prefValue === "number" || typeof prefValue === "string") {
-      rpmInput.value = String(prefValue);
-    }
-    rpmInput.addEventListener("change", (e: Event) => {
-      const value = Number((e.target as HTMLInputElement).value);
-      if (!Number.isFinite(value) || value <= 0) {
-        showAlert("RPM 需要是正数。");
-        return;
-      }
-      setPref("translationRPM", Math.floor(value));
-    });
-  }
-
   const apiKeyInput = doc.querySelector(
     `#zotero-prefpane-${config.addonRef}-translate-api-key`,
   ) as HTMLInputElement | null;
-  if (apiKeyInput) {
-    const prefValue = getPref("translationApiKey");
-    if (typeof prefValue === "string") {
-      apiKeyInput.value = prefValue;
+  const modelInput = doc.querySelector(
+    `#zotero-prefpane-${config.addonRef}-translate-model`,
+  ) as HTMLInputElement | null;
+  const rpmInput = doc.querySelector(
+    `#zotero-prefpane-${config.addonRef}-translate-rpm`,
+  ) as HTMLInputElement | null;
+  const providerNew = doc.querySelector(
+    `#zotero-prefpane-${config.addonRef}-translate-provider-new`,
+  ) as HTMLButtonElement | null;
+  const providerSave = doc.querySelector(
+    `#zotero-prefpane-${config.addonRef}-translate-provider-save`,
+  ) as HTMLButtonElement | null;
+  const providerDelete = doc.querySelector(
+    `#zotero-prefpane-${config.addonRef}-translate-provider-delete`,
+  ) as HTMLButtonElement | null;
+  const parallelToggle = doc.querySelector(
+    `#zotero-prefpane-${config.addonRef}-translate-parallel-enabled`,
+  ) as HTMLInputElement | null;
+  const parallelProvidersContainer = doc.querySelector(
+    `#zotero-prefpane-${config.addonRef}-translate-parallel-providers`,
+  ) as HTMLElement | null;
+  const parallelProvidersLabel =
+    parallelProvidersContainer?.previousElementSibling || null;
+
+  let providersCache: TranslateProvider[] = [];
+  let selectedProviderId = "";
+  let selectedParallelProviders: string[] = [];
+  if (
+    providerSelect &&
+    providerName &&
+    apiBaseInput &&
+    apiKeyInput &&
+    modelInput &&
+    rpmInput
+  ) {
+    providersCache = parseProviders(getPref("translationProviders") || "");
+    if (providersCache.length === 0) {
+      const baseUrl =
+        (getPref("translationApiBaseUrl") as string) ||
+        "https://api.openai.com/v1";
+      const apiKey = (getPref("translationApiKey") as string) || "";
+      const model = (getPref("translationModel") as string) || "gpt-4o-mini";
+      const rpmRaw = getPref("translationRPM");
+      const rpm =
+        typeof rpmRaw === "number"
+          ? rpmRaw
+          : typeof rpmRaw === "string"
+            ? Number(rpmRaw)
+            : 0;
+      providersCache = [
+        {
+          id: "default",
+          name: "Default",
+          apiBaseUrl: baseUrl,
+          apiKey,
+          model,
+          rpm: Number.isFinite(rpm) ? rpm : 0,
+        },
+      ];
+      setPref("translationProviders", JSON.stringify(providersCache));
+      setPref("translationProviderSelection", "default");
     }
-    apiKeyInput.addEventListener("change", (e: Event) => {
-      setPref("translationApiKey", (e.target as HTMLInputElement).value);
+    selectedProviderId = String(getPref("translationProviderSelection") || "");
+    selectedProviderId = resolveSelectedProviderId(
+      providersCache,
+      selectedProviderId,
+    );
+    setPref("translationProviderSelection", selectedProviderId);
+    renderProviderSelect(providerSelect, providersCache, selectedProviderId);
+    selectedParallelProviders = parseParallelProviders(
+      getPref("translationParallelProviders") || "",
+    );
+    if (parallelProvidersContainer) {
+      renderParallelProvidersList(
+        parallelProvidersContainer,
+        providersCache,
+        selectedParallelProviders,
+        (next) => {
+          selectedParallelProviders = next;
+          setPref("translationParallelProviders", JSON.stringify(next));
+        },
+      );
+    }
+    const selected =
+      providersCache.find((p) => p.id === selectedProviderId) || null;
+    fillProviderFields(
+      selected,
+      providerName,
+      apiBaseInput,
+      apiKeyInput,
+      modelInput,
+      rpmInput,
+    );
+
+    providerSelect.addEventListener("change", () => {
+      selectedProviderId = providerSelect.value;
+      setPref("translationProviderSelection", selectedProviderId);
+      const match =
+        providersCache.find((p) => p.id === selectedProviderId) || null;
+      fillProviderFields(
+        match,
+        providerName,
+        apiBaseInput,
+        apiKeyInput,
+        modelInput,
+        rpmInput,
+      );
+    });
+  }
+
+  if (parallelToggle) {
+    const prefValue = getPref("translationParallelEnabled");
+    parallelToggle.checked = Boolean(prefValue);
+    setParallelProvidersVisible(
+      parallelProvidersLabel as HTMLElement | null,
+      parallelProvidersContainer,
+      parallelToggle.checked,
+    );
+    parallelToggle.addEventListener("change", () => {
+      setPref("translationParallelEnabled", parallelToggle.checked);
+      setParallelProvidersVisible(
+        parallelProvidersLabel as HTMLElement | null,
+        parallelProvidersContainer,
+        parallelToggle.checked,
+      );
+    });
+  }
+
+  if (
+    providerNew &&
+    providerName &&
+    apiBaseInput &&
+    apiKeyInput &&
+    modelInput &&
+    rpmInput &&
+    providerSelect
+  ) {
+    providerNew.addEventListener("click", () => {
+      selectedProviderId = "";
+      providerSelect.selectedIndex = -1;
+      fillProviderFields(
+        null,
+        providerName,
+        apiBaseInput,
+        apiKeyInput,
+        modelInput,
+        rpmInput,
+      );
+    });
+  }
+
+  if (
+    providerSave &&
+    providerName &&
+    apiBaseInput &&
+    apiKeyInput &&
+    modelInput &&
+    rpmInput &&
+    providerSelect
+  ) {
+    providerSave.addEventListener("click", () => {
+      const name = providerName.value.trim();
+      const apiBaseUrl = apiBaseInput.value.trim();
+      const apiKey = apiKeyInput.value.trim();
+      const model = modelInput.value.trim();
+      if (!name || !apiBaseUrl) {
+        showAlert("名称和 API Base URL 不能为空。");
+        return;
+      }
+      let rpm = 0;
+      try {
+        rpm = parseRpm(rpmInput.value.trim(), showAlert);
+      } catch {
+        return;
+      }
+
+      const index = providersCache.findIndex(
+        (p) => p.id === selectedProviderId,
+      );
+      if (index >= 0) {
+        providersCache[index] = {
+          ...providersCache[index],
+          name,
+          apiBaseUrl,
+          apiKey,
+          model,
+          rpm,
+        };
+      } else {
+        const id = `provider-${Date.now().toString(36)}`;
+        providersCache.push({ id, name, apiBaseUrl, apiKey, model, rpm });
+        selectedProviderId = id;
+      }
+
+      setPref("translationProviders", JSON.stringify(providersCache));
+      setPref("translationProviderSelection", selectedProviderId);
+      renderProviderSelect(providerSelect, providersCache, selectedProviderId);
+      if (parallelProvidersContainer) {
+        selectedParallelProviders = selectedParallelProviders.filter((id) =>
+          providersCache.some((provider) => provider.id === id),
+        );
+        renderParallelProvidersList(
+          parallelProvidersContainer,
+          providersCache,
+          selectedParallelProviders,
+          (next) => {
+            selectedParallelProviders = next;
+            setPref("translationParallelProviders", JSON.stringify(next));
+          },
+        );
+      }
+    });
+  }
+
+  if (providerDelete && providerSelect) {
+    providerDelete.addEventListener("click", () => {
+      if (!selectedProviderId) return;
+      const nextProviders = providersCache.filter(
+        (p) => p.id !== selectedProviderId,
+      );
+      providersCache = nextProviders;
+      selectedProviderId = nextProviders.length > 0 ? nextProviders[0].id : "";
+      setPref("translationProviders", JSON.stringify(providersCache));
+      setPref("translationProviderSelection", selectedProviderId);
+      renderProviderSelect(providerSelect, providersCache, selectedProviderId);
+      if (parallelProvidersContainer) {
+        selectedParallelProviders = selectedParallelProviders.filter((id) =>
+          providersCache.some((provider) => provider.id === id),
+        );
+        renderParallelProvidersList(
+          parallelProvidersContainer,
+          providersCache,
+          selectedParallelProviders,
+          (next) => {
+            selectedParallelProviders = next;
+            setPref("translationParallelProviders", JSON.stringify(next));
+          },
+        );
+      }
+      if (
+        providerName &&
+        apiBaseInput &&
+        apiKeyInput &&
+        modelInput &&
+        rpmInput
+      ) {
+        const selected =
+          providersCache.find((p) => p.id === selectedProviderId) || null;
+        fillProviderFields(
+          selected,
+          providerName,
+          apiBaseInput,
+          apiKeyInput,
+          modelInput,
+          rpmInput,
+        );
+      }
     });
   }
 
