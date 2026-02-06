@@ -1,7 +1,7 @@
 {
   "name": "zotero-arxiv-reader",
   "type": "module",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Zotero plugin for arXiv HTML fetch, cleanup, and bilingual translation.",
   "config": {
     "addonName": "arXiv Reader",
