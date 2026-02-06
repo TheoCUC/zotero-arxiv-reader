@@ -1,6 +1,7 @@
 import { config } from "../../package.json";
 import { attachArxivHtmlForSelection } from "./arxivDebug";
 import { cleanHtmlAttachmentsForSelection } from "./htmlCleaner";
+import { applyAr5ivCssForSelection } from "./htmlStyleFixer";
 import { translateHtmlForSelection } from "./htmlTranslator";
 import { openTranslationProgressDialog } from "./translationProgress";
 import { openScholarForSelection } from "./scholarSearch";
@@ -57,6 +58,14 @@ export function registerItemMenus() {
     icon: menuIcon,
     isHidden: () => !shouldShowHtmlMenus(),
     commandListener: () => cleanHtmlAttachmentsForSelection(),
+  });
+  ztoolkit.Menu.register("item", {
+    tag: "menuitem",
+    id: "zotero-itemmenu-arxiv-html-style-fix",
+    label: "样式修复",
+    icon: menuIcon,
+    isHidden: () => !shouldShowHtmlMenus(),
+    commandListener: () => applyAr5ivCssForSelection(),
   });
   ztoolkit.Menu.register("item", {
     tag: "menuitem",

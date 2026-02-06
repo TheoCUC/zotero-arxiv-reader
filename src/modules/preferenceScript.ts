@@ -14,6 +14,7 @@ type TranslateProvider = {
   apiKey: string;
   model: string;
   rpm: number;
+  temperature?: number;
 };
 
 const DEFAULT_TRANSLATION_PROMPTS: TranslatePrompt[] = [
@@ -77,6 +78,10 @@ function parseProviders(raw: string): TranslateProvider[] {
         apiKey: String(provider.apiKey ?? "").trim(),
         model: String(provider.model ?? "").trim(),
         rpm: Number(provider.rpm ?? 0),
+        temperature:
+          typeof provider.temperature === "number"
+            ? provider.temperature
+            : Number(provider.temperature ?? 0),
       };
     })
     .filter((provider) => provider.id && provider.name && provider.apiBaseUrl);
@@ -160,6 +165,7 @@ function fillProviderFields(
   apiBaseInput: HTMLInputElement,
   apiKeyInput: HTMLInputElement,
   modelInput: HTMLInputElement,
+  temperatureInput: HTMLInputElement,
   rpmInput: HTMLInputElement,
 ) {
   if (!provider) {
@@ -167,6 +173,7 @@ function fillProviderFields(
     apiBaseInput.value = "";
     apiKeyInput.value = "";
     modelInput.value = "";
+    temperatureInput.value = "";
     rpmInput.value = "";
     return;
   }
@@ -174,6 +181,11 @@ function fillProviderFields(
   apiBaseInput.value = provider.apiBaseUrl;
   apiKeyInput.value = provider.apiKey;
   modelInput.value = provider.model;
+  if (typeof provider.temperature === "number") {
+    temperatureInput.value = String(provider.temperature);
+  } else {
+    temperatureInput.value = "";
+  }
   rpmInput.value = provider.rpm ? String(provider.rpm) : "";
 }
 
@@ -255,6 +267,9 @@ function bindPrefEvents(window: Window) {
   const modelInput = doc.querySelector(
     `#zotero-prefpane-${config.addonRef}-translate-model`,
   ) as HTMLInputElement | null;
+  const temperatureInput = doc.querySelector(
+    `#zotero-prefpane-${config.addonRef}-translate-temperature`,
+  ) as HTMLInputElement | null;
   const rpmInput = doc.querySelector(
     `#zotero-prefpane-${config.addonRef}-translate-rpm`,
   ) as HTMLInputElement | null;
@@ -269,6 +284,9 @@ function bindPrefEvents(window: Window) {
   ) as HTMLButtonElement | null;
   const parallelToggle = doc.querySelector(
     `#zotero-prefpane-${config.addonRef}-translate-parallel-enabled`,
+  ) as HTMLInputElement | null;
+  const parallelReassignToggle = doc.querySelector(
+    `#zotero-prefpane-${config.addonRef}-translate-parallel-reassign`,
   ) as HTMLInputElement | null;
   const parallelProvidersContainer = doc.querySelector(
     `#zotero-prefpane-${config.addonRef}-translate-parallel-providers`,
@@ -285,6 +303,7 @@ function bindPrefEvents(window: Window) {
     apiBaseInput &&
     apiKeyInput &&
     modelInput &&
+    temperatureInput &&
     rpmInput
   ) {
     providersCache = parseProviders(getPref("translationProviders") || "");
@@ -309,6 +328,7 @@ function bindPrefEvents(window: Window) {
           apiKey,
           model,
           rpm: Number.isFinite(rpm) ? rpm : 0,
+          temperature: 0.2,
         },
       ];
       setPref("translationProviders", JSON.stringify(providersCache));
@@ -343,6 +363,7 @@ function bindPrefEvents(window: Window) {
       apiBaseInput,
       apiKeyInput,
       modelInput,
+      temperatureInput,
       rpmInput,
     );
 
@@ -357,6 +378,7 @@ function bindPrefEvents(window: Window) {
         apiBaseInput,
         apiKeyInput,
         modelInput,
+        temperatureInput,
         rpmInput,
       );
     });
@@ -380,12 +402,24 @@ function bindPrefEvents(window: Window) {
     });
   }
 
+  if (parallelReassignToggle) {
+    const prefValue = getPref("translationParallelReassignOnFailure");
+    parallelReassignToggle.checked = Boolean(prefValue);
+    parallelReassignToggle.addEventListener("change", () => {
+      setPref(
+        "translationParallelReassignOnFailure",
+        parallelReassignToggle.checked,
+      );
+    });
+  }
+
   if (
     providerNew &&
     providerName &&
     apiBaseInput &&
     apiKeyInput &&
     modelInput &&
+    temperatureInput &&
     rpmInput &&
     providerSelect
   ) {
@@ -398,6 +432,7 @@ function bindPrefEvents(window: Window) {
         apiBaseInput,
         apiKeyInput,
         modelInput,
+        temperatureInput,
         rpmInput,
       );
     });
@@ -409,6 +444,7 @@ function bindPrefEvents(window: Window) {
     apiBaseInput &&
     apiKeyInput &&
     modelInput &&
+    temperatureInput &&
     rpmInput &&
     providerSelect
   ) {
@@ -417,8 +453,13 @@ function bindPrefEvents(window: Window) {
       const apiBaseUrl = apiBaseInput.value.trim();
       const apiKey = apiKeyInput.value.trim();
       const model = modelInput.value.trim();
+      const temperature = Number(temperatureInput.value.trim());
       if (!name || !apiBaseUrl) {
         showAlert("名称和 API Base URL 不能为空。");
+        return;
+      }
+      if (!Number.isFinite(temperature) || temperature < 0 || temperature > 2) {
+        showAlert("温度需要在 0 到 2 之间。");
         return;
       }
       let rpm = 0;
@@ -439,10 +480,19 @@ function bindPrefEvents(window: Window) {
           apiKey,
           model,
           rpm,
+          temperature,
         };
       } else {
         const id = `provider-${Date.now().toString(36)}`;
-        providersCache.push({ id, name, apiBaseUrl, apiKey, model, rpm });
+        providersCache.push({
+          id,
+          name,
+          apiBaseUrl,
+          apiKey,
+          model,
+          rpm,
+          temperature,
+        });
         selectedProviderId = id;
       }
 
@@ -496,6 +546,7 @@ function bindPrefEvents(window: Window) {
         apiBaseInput &&
         apiKeyInput &&
         modelInput &&
+        temperatureInput &&
         rpmInput
       ) {
         const selected =
@@ -506,6 +557,7 @@ function bindPrefEvents(window: Window) {
           apiBaseInput,
           apiKeyInput,
           modelInput,
+          temperatureInput,
           rpmInput,
         );
       }

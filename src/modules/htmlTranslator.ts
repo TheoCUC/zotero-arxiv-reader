@@ -2,6 +2,7 @@ import {
   getParallelProviders,
   translateTextWithProvider,
 } from "./translationService";
+import { getPref } from "../utils/prefs";
 import {
   addTranslationLog,
   finishTranslationProgress,
@@ -122,6 +123,9 @@ async function translateHtmlAttachment(
   let translatedCount = 0;
   let errorReason = "";
   const providers = getParallelProviders();
+  const reassignOnFailure = Boolean(
+    getPref("translationParallelReassignOnFailure"),
+  );
   const providerProgress: ProviderProgress[] = providers.map((provider) => ({
     id: provider.id,
     name: provider.name || provider.id,
@@ -169,26 +173,20 @@ async function translateHtmlAttachment(
         }
       }
     } else {
-      const queues = providers.map((provider) => ({
-        provider,
-        tasks: [] as typeof tasks,
-      }));
-      tasks.forEach((task, index) => {
-        queues[index % queues.length].tasks.push(task);
-      });
-      queues.forEach((queue, index) => {
-        providerProgress[index].total = queue.tasks.length;
-      });
-      setTranslationProviderProgress(providerProgress);
+      const queue = tasks.slice();
       let aborted = false;
-      const workers = queues.map((queue, index) =>
+      const workers = providers.map((provider, index) =>
         (async () => {
-          for (const task of queue.tasks) {
+          while (true) {
             if (aborted) return;
+            const task = queue.shift();
+            if (!task) return;
+            providerProgress[index].total += 1;
+            setTranslationProviderProgress(providerProgress);
             try {
               const translated = await translateTextWithProvider(
                 task.text,
-                queue.provider,
+                provider,
               );
               if (!translated) continue;
               insertTranslation(task.paragraph, translated);
@@ -197,14 +195,19 @@ async function translateHtmlAttachment(
               setTranslationProviderProgress(providerProgress);
               if (onTranslated) onTranslated();
             } catch (error: any) {
+              const reason = error?.message
+                ? String(error.message)
+                : String(error);
               if (!errorReason) {
-                errorReason = error?.message
-                  ? String(error.message)
-                  : String(error);
+                errorReason = reason;
               }
               providerProgress[index].failed += 1;
-              providerProgress[index].error = errorReason;
+              providerProgress[index].error = reason;
               setTranslationProviderProgress(providerProgress);
+              if (reassignOnFailure) {
+                queue.push(task);
+                return;
+              }
               aborted = true;
               return;
             }
@@ -212,6 +215,9 @@ async function translateHtmlAttachment(
         })(),
       );
       await Promise.all(workers);
+      if (reassignOnFailure && queue.length > 0 && !errorReason) {
+        errorReason = "部分段落未完成，所有服务商均失败。";
+      }
     }
   }
 

@@ -18,6 +18,7 @@ export type TranslateProvider = {
   apiKey: string;
   model: string;
   rpm: number;
+  temperature?: number;
 };
 
 const DEFAULT_PROMPTS: TranslatePrompt[] = [
@@ -58,6 +59,10 @@ function parseProviders(raw: string): TranslateProvider[] {
         apiKey: String(provider.apiKey ?? "").trim(),
         model: String(provider.model ?? "").trim(),
         rpm: Number(provider.rpm ?? 0),
+        temperature:
+          typeof provider.temperature === "number"
+            ? provider.temperature
+            : Number(provider.temperature ?? 0),
       };
     })
     .filter((provider) => provider.id && provider.name && provider.apiBaseUrl);
@@ -150,6 +155,7 @@ function getLegacyProvider(): TranslateProvider {
     apiKey,
     model,
     rpm,
+    temperature: 0.2,
   };
 }
 
@@ -181,6 +187,8 @@ function normalizeProvider(provider: TranslateProvider) {
     rpm: provider.rpm || 0,
     id: provider.id || "unknown",
     name: provider.name || provider.id || "unknown",
+    temperature:
+      typeof provider.temperature === "number" ? provider.temperature : 0.2,
   };
 }
 
@@ -211,6 +219,7 @@ function getTranslationConfig() {
     model: normalized.model,
     rpm: normalized.rpm,
     providerId: normalized.id,
+    temperature: normalized.temperature,
   };
 }
 
@@ -268,7 +277,8 @@ export async function translateText(
   text: string,
   options: TranslateOptions = {},
 ): Promise<string> {
-  const { baseUrl, apiKey, model, rpm, providerId } = getTranslationConfig();
+  const { baseUrl, apiKey, model, rpm, providerId, temperature } =
+    getTranslationConfig();
   const prompts = getSelectedPrompts(options.promptIds);
   const systemPrompt = buildSystemPrompt(prompts);
   const messages = systemPrompt
@@ -282,7 +292,7 @@ export async function translateText(
   const body = JSON.stringify({
     model,
     messages,
-    temperature: 0.2,
+    temperature,
   });
 
   while (true) {
@@ -342,7 +352,7 @@ export async function translateTextWithProvider(
   const body = JSON.stringify({
     model: normalized.model,
     messages,
-    temperature: 0.2,
+    temperature: normalized.temperature,
   });
 
   while (true) {

@@ -3,6 +3,8 @@ import { getPref } from "../utils/prefs";
 const DEFAULT_HTML_BLOCKLIST = [
   "header.desktop_header",
   "button#openForm",
+  "div.html-header-nav",
+  "div.html-header-logo",
 ];
 
 type CleanResult =
@@ -22,14 +24,17 @@ function isHtmlAttachment(item: Zotero.Item): boolean {
 
 function getHtmlBlocklist(): string[] {
   const prefValue = getPref("htmlBlocklist");
-  const raw =
+  const userLines =
     typeof prefValue === "string"
       ? prefValue
-      : DEFAULT_HTML_BLOCKLIST.join("\n");
-  return raw
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0)
+      : [];
+  const merged = new Set<string>();
+  DEFAULT_HTML_BLOCKLIST.forEach((item) => merged.add(item));
+  userLines.forEach((item) => merged.add(item));
+  return Array.from(merged);
 }
 
 function hideBySelectors(doc: Document, selectors: string[]): number {
@@ -62,7 +67,9 @@ function serializeDocument(doc: Document, originalHtml: string): string {
   return `${doctype}${html}`;
 }
 
-async function cleanHtmlAttachment(item: Zotero.Item): Promise<CleanResult> {
+export async function cleanHtmlAttachment(
+  item: Zotero.Item,
+): Promise<CleanResult> {
   if (!item.isAttachment() || !isHtmlAttachment(item)) {
     const title = (item.getField("title") as string) || `Item ${item.id}`;
     return { status: "skipped", title, reason: "非 HTML 附件" };
@@ -122,9 +129,7 @@ export async function cleanHtmlAttachmentsForSelection(): Promise<void> {
   }
   if (skipped.length > 0) {
     messages.push(
-      `已跳过：\n${skipped
-        .map((r) => `${r.title}（${r.reason}）`)
-        .join("\n")}`,
+      `已跳过：\n${skipped.map((r) => `${r.title}（${r.reason}）`).join("\n")}`,
     );
   }
   if (failed.length > 0) {

@@ -55,6 +55,17 @@
   </hbox>
   <hbox>
     <html:label
+      for="zotero-prefpane-__addonRef__-translate-parallel-reassign"
+      data-l10n-id="pref-translate-parallel-reassign"
+    ></html:label>
+    <html:input
+      type="checkbox"
+      id="zotero-prefpane-__addonRef__-translate-parallel-reassign"
+      preference="extensions.zotero.arxiv-reader.translationParallelReassignOnFailure"
+    ></html:input>
+  </hbox>
+  <hbox>
+    <html:label
       for="zotero-prefpane-__addonRef__-translate-parallel-providers"
       data-l10n-id="pref-translate-parallel-providers"
     ></html:label>
@@ -104,6 +115,20 @@
     <html:input
       type="text"
       id="zotero-prefpane-__addonRef__-translate-model"
+      style="width: 100%;"
+    ></html:input>
+  </hbox>
+  <hbox>
+    <html:label
+      for="zotero-prefpane-__addonRef__-translate-temperature"
+      data-l10n-id="pref-translate-temperature"
+    ></html:label>
+    <html:input
+      type="number"
+      min="0"
+      max="2"
+      step="0.1"
+      id="zotero-prefpane-__addonRef__-translate-temperature"
       style="width: 100%;"
     ></html:input>
   </hbox>

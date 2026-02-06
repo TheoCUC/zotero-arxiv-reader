@@ -14,6 +14,7 @@ export type FluentMessageId =
   | 'pref-translate-help'
   | 'pref-translate-model'
   | 'pref-translate-parallel-enabled'
+  | 'pref-translate-parallel-reassign'
   | 'pref-translate-parallel-providers'
   | 'pref-translate-prompt-add'
   | 'pref-translate-prompt-content'
@@ -26,5 +27,6 @@ export type FluentMessageId =
   | 'pref-translate-provider-save'
   | 'pref-translate-provider-select'
   | 'pref-translate-rpm'
+  | 'pref-translate-temperature'
   | 'pref-translate-title'
   | 'prefs-title';

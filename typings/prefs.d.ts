@@ -16,6 +16,7 @@ declare namespace _ZoteroTypes {
       "translationProviders": string;
       "translationProviderSelection": string;
       "translationParallelEnabled": boolean;
+      "translationParallelReassignOnFailure": boolean;
       "translationParallelProviders": string;
       "translationPrompts": string;
       "translationPromptSelection": string;

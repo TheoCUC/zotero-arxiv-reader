@@ -1,4 +1,5 @@
 import { getPref } from "../utils/prefs";
+import { cleanHtmlAttachment } from "./htmlCleaner";
 
 const ARXIV_URL_RE =
   /https?:\/\/(?:www\.)?arxiv\.org\/(abs|pdf|format)\/([^?#\s]+)(?:\.pdf)?/i;
@@ -439,6 +440,8 @@ async function attachArxivHtml(
       report?.(`内嵌 CSS：${title}`);
       await inlineStylesheets(htmlUrl, attachment);
     }
+    report?.(`屏蔽无关元素：${title}`);
+    await cleanHtmlAttachment(attachment);
     report?.(`完成：${title}`);
     return { status: "attached", title, url: htmlUrl };
   } catch (error: any) {
