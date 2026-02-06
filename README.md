@@ -1,58 +1,159 @@
-# arXiv Reader (Zotero Plugin)
+# arXiv Reader（Zotero 插件）
 
-A Zotero 7 plugin that fetches arXiv HTML, cleans clutter, provides bilingual translation with in-reader editing, and adds a translation progress panel plus Google Scholar search.
+一个面向 Zotero 7 的插件：把 arXiv 论文转成可清理、可翻译、可编辑的 HTML 双语阅读流程。
 
-## Features
+## 一眼看懂
 
-- Fetch arXiv HTML attachments from item URL/DOI/extra/archive fields, with duplicate handling.
-- Clean HTML by hiding elements via configurable CSS selectors.
-- Bilingual translation: translate paragraphs and insert translation blocks.
-- Translation progress dialog with status and logs.
-- In-reader translation editing via popup, context menu, and double-click.
-- Google Scholar search based on item title.
+`识别 arXiv 链接 -> 抓取 HTML 附件 -> 屏蔽干扰元素 -> 修复样式 -> 按段翻译 -> 阅读器内编辑翻译 -> 查看翻译进度 -> Google Scholar 检索`
 
-## Settings
+## 能做什么（速览）
 
-- HTML blocklist (CSS selectors, one per line).
-- Inline external CSS (disabled by default).
-- Translation providers: store multiple API services and select one.
-- Parallel translation: optionally distribute paragraphs across multiple providers.
-- Prompt management: select, preview, and add prompts.
+| 目标 | 插件能力 |
+| --- | --- |
+| 获取 arXiv 全文 HTML | 从条目 `URL` / `DOI` / `archiveLocation` / `extra` 识别 arXiv，并自动添加 HTML 附件 |
+| 提升阅读可读性 | 按可配置 CSS 选择器屏蔽无关元素 |
+| 修复显示效果 | 注入 ar5iv CSS 修复 HTML 样式 |
+| 构建双语阅读 | 按段翻译并在原文段落后插入译文块 |
+| 控制翻译稳定性 | 支持多服务商、RPM 限速、并行翻译、失败重分配 |
+| 阅读中直接改译文 | 支持弹窗、右键菜单、双击三种编辑方式 |
+| 跟踪长任务 | 提供翻译进度面板，显示状态、服务商进度和日志 |
+| 延伸文献检索 | 按条目标题一键打开 Google Scholar |
 
-## Development
+## 30 秒使用流程
+
+1. 在 Zotero 中选中一个或多个条目。
+2. 运行 `抓取arXiv网页`。
+3. 可选：运行 `屏蔽无关元素` 和 `样式修复`。
+4. 运行 `双语沉浸式翻译`。
+5. 在阅读器中阅读并按需修改译文。
+6. 需要时在工具菜单打开 `翻译进度` 查看状态。
+
+## 功能详解（重点）
+
+### 1. 抓取 arXiv HTML（`抓取arXiv网页`）
+
+- 自动从 `URL`、`DOI`、`archiveLocation`、`extra` 识别 arXiv ID。
+- 将 `https://arxiv.org/html/...` 下载为 Zotero HTML 附件并挂到父条目。
+- 如果已存在 HTML 附件，会提示你选择 `覆盖`、`重命名` 或 `取消`。
+- 可选支持外部 CSS 内嵌（由设置项 `inlineCss` 控制）。
+
+### 2. 清理 HTML 干扰元素（`屏蔽无关元素`）
+
+- 按偏好设置中的 CSS 选择器列表批量隐藏页面元素。
+- 适合去掉页头、导航、按钮等与正文无关的区域。
+- 处理后会直接写回附件 HTML 文件，阅读器刷新后生效。
+
+### 3. 修复页面样式（`样式修复`）
+
+- 注入 ar5iv CSS，改善公式、段落、标题等排版一致性。
+- 适用于“抓到了 HTML 但显示不稳定/不美观”的情况。
+
+### 4. 双语沉浸式翻译（`双语沉浸式翻译`）
+
+- 以段落为单位翻译，并把译文块插在原文段落后面。
+- 支持多服务商配置、服务商选择、RPM 限速。
+- 支持并行翻译和失败重分配（可在设置中开关）。
+- 支持 Prompt 选择与自定义，便于学术翻译风格控制。
+
+### 5. 阅读器内译文编辑
+
+- 支持三种编辑入口：选中文本弹窗、右键菜单、双击译文块。
+- 编辑后会回写到 HTML 附件，后续打开仍保留修改结果。
+
+### 6. 翻译进度面板（`翻译进度`）
+
+- 显示总进度、当前状态、日志。
+- 并行翻译时可看到各服务商的完成数、失败数、错误信息。
+
+### 7. Google Scholar 联动（`Google Scholar 搜索`）
+
+- 按选中条目的标题自动拼接查询词并打开 Scholar 页面。
+- 适合快速补充引用、查找版本和相关工作。
+
+## 如何使用（详细）
+
+### A. 首次使用前配置（仅一次）
+
+1. 打开 Zotero 设置，进入插件偏好页 `arXiv Reader`。
+2. 配置翻译服务商：`API Base URL`、`API Key`、`Model`、`RPM`、`Temperature`。
+3. 选择默认 Prompt；如果需要可新增自定义 Prompt。
+4. 按需启用 `并行翻译`、`失败重分配`、`外部 CSS 内嵌`。
+5. 在 `HTML 屏蔽列表` 中维护要隐藏的 CSS 选择器（每行一个）。
+
+### B. 单篇论文标准流程
+
+1. 在 Zotero 中选中目标条目（确保条目里有 arXiv 相关信息）。
+2. 右键执行 `抓取arXiv网页`，生成 HTML 附件。
+3. 可选执行 `屏蔽无关元素`，去除页面噪声。
+4. 可选执行 `样式修复`，改善排版显示。
+5. 执行 `双语沉浸式翻译`，等待段落翻译完成。
+6. 打开 HTML 附件阅读，若译文不满意可直接编辑。
+
+### C. 批量处理流程
+
+1. 在 Zotero 中多选多个条目。
+2. 执行 `抓取arXiv网页`，插件会按父条目去重后逐条处理。
+3. 再执行 `双语沉浸式翻译`，并在 `翻译进度` 查看整体状态。
+4. 对失败项根据日志重试，或调整服务商配置后再跑一次。
+
+### D. 常见问题排查
+
+1. 抓取失败或提示未找到 arXiv URL：检查条目的 `URL`、`DOI`、`archiveLocation`、`extra` 是否包含 arXiv 信息。
+2. 翻译失败：优先检查 `API Key`、`API Base URL`、`Model` 是否可用，以及 RPM 是否过低或触发限流。
+3. 页面样式异常：先执行一次 `样式修复`，必要时在设置中启用 `外部 CSS 内嵌` 后重新抓取。
+4. 翻译质量不理想：切换 Prompt，或新增更贴合你领域的学术翻译 Prompt。
+
+## 设置项
+
+- HTML 屏蔽列表（每行一个 CSS 选择器）。
+- 外部 CSS 内嵌（默认关闭）。
+- 翻译服务商管理（可保存多个 API 服务并选择）。
+- 并行翻译（可将段落分配到多个服务商）。
+- Prompt 管理（选择、预览、添加）。
+
+## 菜单入口
+
+- 条目菜单：`抓取arXiv网页`
+- 条目菜单：`屏蔽无关元素`
+- 条目菜单：`样式修复`
+- 条目菜单：`双语沉浸式翻译`
+- 条目菜单：`Google Scholar 搜索`
+- 工具菜单：`翻译进度`
+
+## 开发
 
 ```sh
 npm start
 ```
 
-## Build
+## 构建
 
 ```sh
 npm run build
 ```
 
-## Tests
+## 测试
 
 ```sh
 npm test
 ```
 
-## Release
+## 发布
 
 ```sh
 npm run release
 ```
 
-## Tech Stack
+## 技术栈
 
 - TypeScript
 - zotero-plugin-scaffold
 - zotero-plugin-toolkit
-- OpenAI-compatible translation API (default: https://api.openai.com/v1)
+- OpenAI 兼容翻译 API（默认：`https://api.openai.com/v1`）
 
-## Structure
+## 项目结构
 
-- `src/index.ts`: plugin entry and global instance.
-- `src/hooks.ts`: lifecycle hooks and registration.
-- `src/modules/`: feature modules (fetch, clean, translate, edit, progress, menus).
-- `addon/`: manifest, preferences UI, and locales.
+- `src/index.ts`：插件入口与全局实例。
+- `src/hooks.ts`：生命周期钩子与注册逻辑。
+- `src/modules/`：功能模块（抓取、清理、翻译、编辑、进度、菜单）。
+- `addon/`：manifest、偏好设置 UI、本地化资源。
