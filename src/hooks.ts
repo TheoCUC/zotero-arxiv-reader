@@ -45,9 +45,7 @@ async function onStartup() {
   addon.data.initialized = true;
 }
 
-async function onMainWindowLoad(
-  _win: _ZoteroTypes.MainWindow,
-): Promise<void> {
+async function onMainWindowLoad(_win: _ZoteroTypes.MainWindow): Promise<void> {
   // Create ztoolkit for every window
   addon.data.ztoolkit = createZToolkit();
 

@@ -31,9 +31,7 @@ function getSelectionElement(
   const element =
     node instanceof Element ? node : (node.parentElement as Element | null);
   if (!element) return null;
-  return element.closest(
-    `.${TRANSLATION_CLASS}, [${TRANSLATION_ATTR}="true"]`,
-  );
+  return element.closest(`.${TRANSLATION_CLASS}, [${TRANSLATION_ATTR}="true"]`);
 }
 
 function serializeDocument(doc: Document, originalHtml: string): string {
@@ -91,7 +89,9 @@ function attachDblClickEditor(
     (event) => {
       const target = event.target as Element | null;
       if (!target) return;
-      const block = target.closest(`.${TRANSLATION_CLASS}`) as HTMLElement | null;
+      const block = target.closest(
+        `.${TRANSLATION_CLASS}`,
+      ) as HTMLElement | null;
       if (!block) return;
       if (block.querySelector("textarea")) return;
 
@@ -144,10 +144,7 @@ function attachDblClickEditor(
   );
 }
 
-function openEditDialog(
-  reader: _ZoteroTypes.ReaderInstance,
-  element: Element,
-) {
+function openEditDialog(reader: _ZoteroTypes.ReaderInstance, element: Element) {
   const dialogData: { [key: string]: any } = {
     textValue: element.textContent || "",
   };
